@@ -1,0 +1,85 @@
+name: Bug report / Bug 报告
+description: Something on the device does not behave as documented | 真机行为与文档不一致
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 中文说明
+        请尽量把下面每一项都填上。**报 bug 时最省时间的两条信息**是：开机横幅那一行，以及屏幕是**自己恢复**还是**必须断电**。
+        提交前请先读 [BUILDING.md](../../BUILDING.md) 的故障对照表——不少"故障"其实是工具链/PSRAM 配置问题。
+  - type: input
+    id: version
+    attributes:
+      label: Firmware version (boot banner) | 固件版本（开机横幅）
+      description: The exact `=== MATRIX RAIN vX.Y.Z (…) ===` line from the serial log. | 串口日志里那一行原样粘贴。
+      placeholder: "=== MATRIX RAIN v1.3.1 (Boot NTP + RTC + confirm screen + WiFi-setup) ==="
+    validations:
+      required: true
+  - type: dropdown
+    id: built-from
+    attributes:
+      label: How did you flash it? | 你是怎么刷进去的？
+      options:
+        - M5Burner, release asset / M5Burner，用 Release 里的镜像
+        - Built from source in this repo / 从本仓库源码自行构建
+        - Modified source / 改过的源码
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened | 现象
+      description: Screen behaviour, timing, and whether the FPS log kept printing. | 屏幕表现、发生时间点、串口 `FPS:` 是否还在打印。
+    validations:
+      required: true
+  - type: dropdown
+    id: recovery
+    attributes:
+      label: How did the device recover? | 设备是怎么恢复的？
+      description: This single detail separates a software panic from a hardware-level stall — they have completely different causes. | 这一个细节就能区分软件 panic 和硬件级挂死，两者根因完全不同。
+      options:
+        - Rebooted by itself / 自己重启了
+        - Needed a power cycle / 必须断电才能恢复
+        - It never stopped working, something else was wrong / 没有卡死，是别的问题
+    validations:
+      required: true
+  - type: dropdown
+    id: usb
+    attributes:
+      label: Was USB attached at the time? | 出问题时插着 USB 吗？
+      description: USB-CDC traffic competes for PSRAM bandwidth with the display path — it is a known aggravating factor on this board, not a neutral detail. | USB-CDC 流量会和显示通路抢 PSRAM 带宽，这是这块板子已知的加重因素，不是无关细节。
+      options:
+        - "Yes, serial monitor open / 插着，串口开着"
+        - "Yes, charging only / 插着，只是供电"
+        - "No / 没插"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce | 复现步骤
+      placeholder: |
+        1. ...
+        2. ...
+        Expected / 期望：
+        Actual / 实际：
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Serial log | 串口日志
+      description: Paste any `FPS:`, `TIMEOUT`, or panic output. Keep the session short — a long one can itself perturb the display path. | 把 `FPS:`、`TIMEOUT` 或 panic 输出贴上来。串口别开太久——开久了本身就会扰动显示通路。
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting | 提交前确认
+      options:
+        - label: I read the troubleshooting table in BUILDING.md / 我读过 BUILDING.md 的故障对照表
+          required: true
+        - label: I verified this on real hardware (not just in the terminal) / 我在真机上验证过（不只是终端里）
+          required: true

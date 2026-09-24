@@ -1,0 +1,33 @@
+# --- PlatformIO / build output ---
+.pio/
+build/
+debug/
+*.elf
+*.map
+compile_commands.json
+sdkconfig.old
+sdkconfig
+
+# --- flash images and packaging (attach these to Releases, never commit) ---
+*.bin
+*.zip
+.release/
+
+# --- logs ---
+logs/
+*.log
+
+# --- python ---
+__pycache__/
+*.pyc
+
+# --- node / editors / macOS ---
+node_modules/
+.DS_Store
+*.swp
+*.bak
+*.orig
+*.rej
+
+# NOTE: src/sdkconfig.h and src/sdkconfig_override.h are SOURCE — they are the
+# PSRAM 200 MHz override for the prebuilt Arduino libraries. Do not ignore them.

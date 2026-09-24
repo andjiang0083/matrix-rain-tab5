@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Build / flash problems · 构建与刷机问题
+    url: https://github.com/andjiang0083/matrix-rain-tab5/blob/main/BUILDING.md
+    about: The pinned platform, the toolchain-path override and the full troubleshooting table. Most build failures are in here. | 固定版本平台、工具链路径覆盖、完整故障对照表——多数构建失败都能在这里找到。
+  - name: Questions and ideas · 提问与想法
+    url: https://github.com/andjiang0083/matrix-rain-tab5/discussions
+    about: Ask anything about hardware, the display path, or where to start contributing. | 硬件、显示通路、从哪里开始参与共建，都可以在这里问。
+  - name: What to work on · 可以做什么
+    url: https://github.com/andjiang0083/matrix-rain-tab5/blob/main/ROADMAP.md
+    about: Sized-up tasks, including the hardware this build does not use yet. Comment on the issue before starting. | 拆好粒度的待办，包括本版本尚未使用的硬件。动手前先在 issue 下留言。

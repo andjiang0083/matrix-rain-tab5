@@ -1,0 +1,51 @@
+name: Feature request / 功能建议
+description: Propose a change or a new use of the hardware | 提议一个改动或一种硬件新用法
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 中文说明
+        本项目对"用上这块板子还没被用到的硬件"特别感兴趣（音频 codec、IMU、电量计、RTC 中断线）。
+        如果建议涉及**绘制通路或 PSRAM 流量**，请先读 [CONTRIBUTING.md](../../CONTRIBUTING.md) 的项目约定——那类改动必须能实测、并且能在运行时关掉。
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve? | 想解决什么问题？
+      description: Describe the situation, not the implementation. | 描述场景，不用先给实现方案。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach | 建议的做法
+    validations:
+      required: false
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware involved | 涉及哪些硬件
+      description: Any on-board peripheral (ES8388, BMI270, INA226, RX8130CE, SD, camera, RS-485 …) or external one.
+      placeholder: "e.g. BMI270 IMU / ES8388 audio / RX8130CE alarm interrupt"
+    validations:
+      required: false
+  - type: dropdown
+    id: touches-display
+    attributes:
+      label: Does it touch the display path? | 会动到绘制通路吗？
+      options:
+        - "No / 不会"
+        - "Yes — I will measure it and put it behind a runtime switch / 会，我会实测并放在运行时开关后面"
+        - "Not sure / 不确定"
+    validations:
+      required: true
+  - type: dropdown
+    id: volunteer
+    attributes:
+      label: Would you like to implement it? | 你愿意自己实现吗？
+      options:
+        - "Yes, I have a Tab5 to test on / 愿意，我手上有 Tab5 可以验证"
+        - "Yes, but I do not own the hardware / 愿意，但手上没有这台设备"
+        - "No, just suggesting / 不了，只是建议"
+    validations:
+      required: true
