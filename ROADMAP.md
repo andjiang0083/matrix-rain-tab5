@@ -48,7 +48,7 @@ The 30 fps cap is a **deliberate ceiling**, not a measured limit: we capped it b
 ## 7. Docs
 
 - [ ] Windows and Linux build walkthroughs (the current one is macOS-flavoured).
-- [ ] Screenshots and a short capture in the README — nothing sells a clock like seeing it run.
+- [x] Screenshots in the README — first real-device photo added. A short capture (screen in motion) is still wanted: nothing sells a clock like seeing it run.
 - [ ] Architecture notes: the glow-buffer/PAL design, the drawing budget, why there is no sprite in the hot path.
 - [ ] More translations.
 

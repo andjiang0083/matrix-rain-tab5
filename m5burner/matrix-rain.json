@@ -5,7 +5,7 @@
   "author": "andjiang0083",
   "category": "M5Stack-Tab5",
   "tags": ["clock", "matrix", "ntp"],
-  "cover": "",
+  "cover": "https://raw.githubusercontent.com/andjiang0083/matrix-rain-tab5/main/docs/screenshots/device-rain.jpg",
   "github": "https://github.com/andjiang0083/matrix-rain-tab5",
   "download": 0,
   "versions": [{

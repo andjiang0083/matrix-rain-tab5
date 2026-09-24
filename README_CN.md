@@ -11,6 +11,10 @@
 
 基于 [M5Stack Tab5](https://docs.m5stack.com/zh_CN/core/Tab5)（ESP32-P4，RISC-V，1280×720 屏）。整个程序是单板应用：Arduino + M5Unified，**不用 LVGL、不套框架**，每一个界面都是直接画到面板上的。
 
+![M5Stack Tab5 上运行的骇客帝国数字雨时钟](docs/screenshots/device-rain.jpg)
+
+*真机实拍：80 列字符雨，时钟从穿过它的字符里显出来。右下角的 `SET` 是时钟界面上唯一常驻的 UI 元素。*
+
 ---
 
 ## 现状

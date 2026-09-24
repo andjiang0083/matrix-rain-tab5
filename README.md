@@ -13,6 +13,10 @@
 
 Built for the [M5Stack Tab5](https://docs.m5stack.com/en/core/Tab5) (ESP32-P4, RISC-V, 1280×720 panel). Written as a single-board application in C++ on Arduino + M5Unified; no LVGL, no framework — every screen is drawn directly to the panel.
 
+![Matrix Rain Clock running on an M5Stack Tab5](docs/screenshots/device-rain.jpg)
+
+*Running on a real Tab5: 80 columns of glyph rain, and the clock emerging from the characters that pass through it. The `SET` button in the bottom-right corner is the only UI element the clock ever shows.*
+
 ---
 
 ## Status
