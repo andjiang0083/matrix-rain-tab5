@@ -66,14 +66,16 @@ env.PrependENVPath("PATH", cands[-1])
 git clone https://github.com/andjiang0083/matrix-rain-tab5.git
 cd matrix-rain-tab5
 
-~/.platformio/penv/bin/pio run -e tab5          # 首次下载完依赖后约 2 分钟
+~/.platformio/penv/bin/pio run -e tab5
+# 首次运行：下载平台、Arduino 核心、库包和 RISC-V 工具链（约 1.5GB）——几分钟
+# 之后的每次干净重建（即使 rm -rf .pio）：几秒钟
 ```
 
 一次健康的构建结尾长这样（数值来自当前代码树）：
 
 ```
 RAM:   [=         ]  10.4% (used 53008 bytes from 512000 bytes)
-Flash: [====      ]  35.8% (used 1127264 bytes from 3145728 bytes)
+Flash: [====      ]  35.8% (used 1127280 bytes from 3145728 bytes)
 Building .pio/build/tab5/firmware.bin
 Creating binary "firmware.factory.bin" with:
     Offset   | File
@@ -81,7 +83,7 @@ Creating binary "firmware.factory.bin" with:
  -  0x8000   | partitions.bin
  -  0xe000   | boot_app0.bin
  -  0x10000  | firmware.bin
-======================== [SUCCESS] Took 112.21 seconds ========================
+========================= [SUCCESS] Took 7.90 seconds =========================
 ```
 
 **声明"这个改动能编过"之前，务必在干净树里验证**（`rm -rf .pio && pio run`）。增量构建会掩盖缺失文件和过期的生成头文件——片假名字库和 `sdkconfig.h` 覆盖这两处都特别容易这么坏掉。
@@ -215,7 +217,7 @@ PY
 | 打印 `TIMEOUT 3000ms` 然后重启 | 帧保护触发——某一帧超过 3 秒 | 通常还是总线争用那件事：检查是不是新加了全屏 sprite 或第二个帧缓冲写入者 |
 | 退出设置菜单时蓝屏并重启 | 1.3.1 之前的 sprite/发光缓冲残留状态 | v1.3.1 会在退出时清发光缓冲并重新同步时钟——升级 |
 | 退出菜单后屏幕有"残影"（旧菜单像素） | 同上 | 同上 |
-| 片假名集显示成空白格 | `katakana_font.h` 缺失或被截断了——它是生成物 | 跑 `python3 tools/fontgen.py`（需要 Pillow） |
+| 片假名集显示成空白格 | `katakana_font.h` 缺失或被截断了——它是生成物 | 跑 `python3 tools/fontgen.py > src/katakana_font.h`（需要 Pillow）；在装了该源字体的机器上，生成结果与仓库里的头文件**逐字节一致** |
 | 片假名跟截图里长得不完全一样 | 你用别的 TTF 重新生成过字库 | 属正常——见 [CREDITS.md](CREDITS.md) |
 | 中文 SSID 显示成 `□` 方框 | GLCD 字体和屏幕键盘只支持 ASCII | 已知限制，见 README 现状表 |
 | M5Burner 能导入但板子启动不了 | 镜像没合并，或者是 QIO | 按第 6 节的偏移重新合并，并检查 flash 模式字节 |

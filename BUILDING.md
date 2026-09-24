@@ -66,14 +66,17 @@ A PR that replaces the hard-coded path with auto-detection would be very welcome
 git clone https://github.com/andjiang0083/matrix-rain-tab5.git
 cd matrix-rain-tab5
 
-~/.platformio/penv/bin/pio run -e tab5          # ~2 minutes after the first download
+~/.platformio/penv/bin/pio run -e tab5
+# very first run: downloads the platform, the Arduino core, the library bundle and
+# the RISC-V toolchain (~1.5 GB) — a couple of minutes
+# every clean rebuild after that (even with `rm -rf .pio`): a few seconds
 ```
 
 A good build ends like this (values from the current tree):
 
 ```
 RAM:   [=         ]  10.4% (used 53008 bytes from 512000 bytes)
-Flash: [====      ]  35.8% (used 1127264 bytes from 3145728 bytes)
+Flash: [====      ]  35.8% (used 1127280 bytes from 3145728 bytes)
 Building .pio/build/tab5/firmware.bin
 Creating binary "firmware.factory.bin" with:
     Offset   | File
@@ -81,7 +84,7 @@ Creating binary "firmware.factory.bin" with:
  -  0x8000   | partitions.bin
  -  0xe000   | boot_app0.bin
  -  0x10000  | firmware.bin
-======================== [SUCCESS] Took 112.21 seconds ========================
+========================= [SUCCESS] Took 7.90 seconds =========================
 ```
 
 **Always verify from a clean tree** (`rm -rf .pio && pio run`) before you claim a change builds. Incremental builds hide missing files and stale generated headers — the katakana font and the `sdkconfig.h` override are both easy to break this way.
@@ -215,7 +218,7 @@ Two more guards exist for the display path, and they are not decoration:
 | `TIMEOUT 3000ms` then reboot | the frame guard fired — a frame took >3 s | usually the same bus-contention story; check for a new full-screen sprite or a second framebuffer writer |
 | Blue screen and restart right after leaving the setup menu | stale sprite/glow state from pre-1.3.1 builds | v1.3.1 clears the glow buffers and re-syncs the clock on exit — update |
 | Screen "residue" (old menu pixels) after leaving the menu | same as above | same as above |
-| Katakana set renders as blank cells | `katakana_font.h` missing or truncated — it is generated | run `python3 tools/fontgen.py` (needs Pillow) |
+| Katakana set renders as blank cells | `katakana_font.h` missing or truncated — it is generated | run `python3 tools/fontgen.py > src/katakana_font.h` (needs Pillow); on a machine that has the source TTF this reproduces the committed header byte-for-byte |
 | Katakana looks slightly different from the screenshots | you regenerated the font with a different TTF | expected — see [CREDITS.md](CREDITS.md) |
 | Chinese SSID shows as `□` boxes | the GLCD font and the on-screen keyboard are ASCII-only | known; see the README status table |
 | M5Burner imports the firmware but the board will not boot it | the image is not merged, or is QIO | re-merge with the offsets in §6 and check the flash-mode byte |
