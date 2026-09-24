@@ -39,6 +39,8 @@ This project is built on other people's work, and one of its files is generated 
 
   Good OFL candidates: **Noto Sans JP**, **M PLUS 1 Code**, **IPAex Gothic**, **Source Han Sans**. Note that glyph shapes at 16×16 will differ slightly from the shipped set — that is expected. Making the path a `--font` argument is on the [roadmap](ROADMAP.md); a PR is welcome.
 
+- **Scope of the project licence:** the MIT text in [LICENSE](LICENSE) is kept verbatim (so licence scanners recognise it) and covers the code in this repository. It does not — and cannot — relicense the generated bitmap data further than the contributors are able to license it, which is exactly why this section exists and is kept next to the file it describes. `tools/fontgen.py` is ordinary source code and is fully covered by the MIT licence.
+
 ## Trademarks and the fan-work boundary
 
 - *The Matrix* — including the green "digital rain" as an identifiable visual and the quoted lines in the UI and docs — is the property of **Warner Bros.** This is an **unaffiliated fan project**: it contains no film assets, no logos and no artwork, and it is not endorsed by or connected to the rights holders. Quotes are used as short cultural references in a piece of free fan software.
