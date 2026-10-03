@@ -2,6 +2,28 @@
 
 All notable changes to this project. Dates are the original build dates; version numbers follow the author's convention of small patches rather than feature milestones.
 
+## v1.3.2 — time source fix + a real crash fix (2026-10-04)
+
+Found on a real Tab5: the clock showed a stale time *after* a "successful" WiFi sync, the RTC held a date of 2084-08-11 from an earlier bad write, and the device rebooted behind a blue screen shortly after a sync succeeded.
+
+### Fixed — the blue screen that followed a successful sync
+
+- **Task-watchdog panic caused by blocking USB-CDC writes.** The flash coredump named it: `loopTask` was stuck in `cdc0_write_char()` → `prvSendAcquireGeneric()` (i.e. waiting on the CDC ring buffer) when the 8 s task watchdog fired. HWCDC's default TX timeout is 100 ms and `HWCDC::write()` allows up to 20 consecutive timeouts (~2 s), so a handful of long lines starve the watchdog whenever a host is *connected but not draining* the ring — closing a serial monitor is enough. The panic paints the screen blue and then reboots. It lands right after a sync because that is where the boot path prints its longest line. `Serial.setTxTimeoutMs(0)` makes every CDC write non-blocking: bytes are dropped instead of waited for.
+- **WiFi setup no longer hijacks the boot.** `runWifiSetup()` used to run whenever `autoConnectAndSync()` returned false, which conflated "no credentials saved" with "the network or the sync failed" — so one WiFi hiccup left the device sitting in the wizard with the clock never starting. With credentials present, a failed sync now boots the clock anyway (seeded from the validated RTC), and the wizard stays reachable from `SET → WiFi Setup`.
+- **The first SNTP query is no longer sent before DHCP is up.** `esp_wifi_sta_get_ap_info() == ESP_OK` means *associated*, not *reachable*; a query sent with no DNS resolution is silently lost, which reads on the panel as "NTP is broken". The sync now waits for a lease and re-arms once (`sntp_restart()`) halfway through its window.
+- **The clock path no longer touches NVS.** The timezone offset is read once into RAM instead of opening `Preferences` on every refresh; on the P4 flash and PSRAM share the MSPI path and the DSI scan-out is already marginal, so the flash traffic is worth removing.
+
+### Fixed — the time source
+
+- **`getLocalTime()` was being used as the "NTP has synced" signal, and it is not one.** It only reports that the system clock *looks* plausible — and `M5.begin()` seeds that clock from the hardware RTC (`RTC_Class::setSystemTimeFromRtc()`), so immediately after `configTime()` it returns true carrying the *pre-sync* value. The boot path therefore raced the NTP response: it confirmed the old time on screen and wrote it back into the RTC, which is why the clock still showed it afterwards. The SNTP notification callback plus `sntp_get_sync_status()` is now the signal, with a 20 s bound.
+- **The clock face no longer reads the RTC.** `updateClockFromNTP()` derives HH:MM from the system clock (UTC epoch) plus the saved offset. The RX8130CE is only a fallback *seed*, and only after it passes range validation and a "is it actually ticking" check (two reads 1.1 s apart), so a stopped or garbage RTC cannot get through.
+- **RTC writes are verified.** `M5.Rtc.setDateTime()` returns `void`, so a write that silently failed looked exactly like a good one; the value is now read back and compared (±2 s, allowing the seconds register to tick across the write).
+- **The display is gated on a trusted source.** Nothing is shown until either a real NTP sync happened this boot or the RTC passed validation; otherwise the clock shows `00:00` rather than a plausible-looking wrong time.
+- **The confirmation screen mixed UTC and local.** It printed the UTC *date* with the local *time*, which is a day out between 00:00 and 08:00 at UTC+8 (i.e. right now).
+- Clock value refresh: 60 s → 5 s (it is now a division rather than an I2C read, so the minute flips punctually).
+- New one-line boot diagnostic: `[TIME] ntp=... utc=... rtc=on write=ok` — reports the NTP result and whether the RTC write landed.
+- Removed `src/timesync.h`, which declared `g_epoch` / `g_epochBase` / `g_timeValid` / `syncNTP()` — symbols that never existed anywhere in the build.
+
 ## v1.3.1 — first public release (2026-07-14, public repo published 2026-09-24)
 
 The first public snapshot. Everything below was developed on a real Tab5 and is what the attached firmware contains.

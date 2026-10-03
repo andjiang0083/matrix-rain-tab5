@@ -10,3 +10,5 @@ void runWifiSetup();
 void reconnectWifi();   // re-run wizard without re-init hosted stack
 bool autoConnectAndSync();
 void updateClockFromNTP(int& h, int& m);
+bool wifiHasCreds();    // saved SSID + setup flag present
+bool timeRtcPlausible();// hardware RTC holds a usable UTC date right now

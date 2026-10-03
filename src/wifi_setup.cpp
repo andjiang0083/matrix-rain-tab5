@@ -8,6 +8,8 @@
 #include <esp_netif.h>
 #include <esp_mac.h>
 #include <esp32-hal-hosted.h>
+#include <esp_sntp.h>
+#include <sys/time.h>
 #include "matrix_gui.h"
 
 // ── Tab5 Hosted SDIO pins ──
@@ -36,6 +38,155 @@ static bool     g_kbFull     = true;   // force full keyboard redraw
 static bool     g_passDirty  = false;  // just password field update
 static bool     g_tzDirty    = true;   // timezone needs redraw
 static uint32_t g_lastRedraw = 0;
+
+// ────────────────────────────────────────────────────────────
+// Time source — never display a time we cannot justify.
+//
+// NTP is the only authoritative source. The RX8130CE (holding UTC) is a
+// fallback for boots without a network. The rule that matters:
+//
+//   getLocalTime() is NOT an "NTP has synced" signal. It returns true as soon
+//   as the system clock merely looks plausible — and M5.begin() seeds that
+//   clock from the hardware RTC (RTC_Class::setSystemTimeFromRtc()), so right
+//   after configTime() it returns true immediately with the *pre-sync* time.
+//   Waiting on it therefore raced the NTP response: a stale RTC value was
+//   confirmed on screen and written back into the RTC, which is why the clock
+//   still showed it after a "successful" sync.
+//
+// The SNTP notification callback / sync status is the real signal. Everything
+// downstream then reads the system clock — the RTC is only ever a seed.
+// ────────────────────────────────────────────────────────────
+static constexpr time_t EPOCH_2025 = 1735689600;   // 2025-01-01T00:00:00Z
+static volatile bool g_sntpSynced  = false;
+static bool g_timeTrusted          = false;        // NTP confirmed, or RTC validated
+static bool g_rtcSeedTried         = false;        // one fallback attempt per boot
+
+static void onSntpSync(struct timeval*) { g_sntpSynced = true; }
+
+// Start (or restart) SNTP and wait for a real sync. False on timeout.
+static bool ntpSync(uint32_t gmtOffsetSec, uint32_t timeoutMs) {
+  // Association is not reachability. Asking for the time before DHCP hands out
+  // a lease means the first query goes out with no DNS and is silently lost,
+  // which reads on the panel as "NTP is broken" (it cost us a whole boot).
+  {
+    esp_netif_t* nif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    uint32_t tw = millis();
+    while (millis() - tw < 8000) {
+      esp_netif_ip_info_t ip = {};
+      if (nif && esp_netif_get_ip_info(nif, &ip) == ESP_OK && ip.ip.addr != 0) break;
+      esp_task_wdt_reset();
+      delay(100);
+    }
+  }
+
+  g_sntpSynced = false;
+  configTime((long)gmtOffsetSec, 0, "pool.ntp.org", "time.google.com");
+  sntp_set_time_sync_notification_cb(onSntpSync);   // after configTime: it starts SNTP
+  uint32_t t0 = millis();
+  bool rearmed = false;
+  while (millis() - t0 < timeoutMs) {
+    esp_task_wdt_reset();
+    if (g_sntpSynced || sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) {
+      g_timeTrusted = true;
+      return true;
+    }
+    // One unacknowledged query is all lwIP sends before it backs off, so if that
+    // one was lost, re-arm once rather than waiting out the whole window.
+    if (!rearmed && millis() - t0 > timeoutMs / 2) {
+      rearmed = true;
+      sntp_restart();
+    }
+    delay(100);
+  }
+  return false;
+}
+
+// Days-from-civil → UTC epoch, in pure integer math (no mktime/timegm, no
+// dependency on the ambient TZ). Verified against Python's calendar.
+static time_t utcEpoch(int year, int month, int day, int h, int mi, int s) {
+  int y = year - (month <= 2 ? 1 : 0);
+  int era = (y >= 0 ? y : y - 399) / 400;
+  unsigned yoe = (unsigned)(y - era * 400);
+  unsigned doy = (153u * (unsigned)(month > 2 ? month - 3 : month + 9) + 2) / 5
+               + (unsigned)day - 1;
+  unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  long long days = (long long)era * 146097 + (long long)doe - 719468;
+  return (time_t)(days * 86400LL + h * 3600 + mi * 60 + s);
+}
+
+// Timezone offset cache. The clock re-derives HH:MM every few seconds, and on
+// this board flash and PSRAM share the MSPI path — the DSI scan-out is already
+// marginal, so the clock path must not touch NVS. Read once, then keep it in
+// RAM (the wizard and the boot path refresh it when the user changes it).
+static int32_t g_tzCache = INT32_MIN;      // seconds east of UTC; INT32_MIN = not loaded
+
+static int32_t tzSeconds() {
+  if (g_tzCache == INT32_MIN) {
+    Preferences prefs;
+    prefs.begin("cyberclock", true);
+    g_tzCache = prefs.getInt("tz", 28800);
+    prefs.end();
+  }
+  return g_tzCache;
+}
+
+// Read the RTC and reject anything a broken / never-set RTC could return.
+static bool rtcReadUTC(m5::rtc_datetime_t& out) {
+  m5::rtc_datetime_t r;
+  if (!M5.Rtc.isEnabled() || !M5.Rtc.getDateTime(&r)) return false;  // driver checks BCD + weekday
+  if (r.date.year < 2025 || r.date.year > 2099) return false;
+  if (r.date.month < 1 || r.date.month > 12) return false;
+  if (r.date.date  < 1 || r.date.date  > 31) return false;
+  if (r.time.hours   < 0 || r.time.hours   > 23) return false;
+  if (r.time.minutes < 0 || r.time.minutes > 59) return false;
+  if (r.time.seconds < 0 || r.time.seconds > 60) return false;
+  out = r;
+  return true;
+}
+
+// Write UTC into the RTC and verify it landed: M5.Rtc.setDateTime() returns
+// void, so a write that never took effect is otherwise indistinguishable from
+// a good one (this is how a stale RTC kept surviving the sync).
+static bool rtcWriteUTC(const struct tm& utcTm) {
+  if (!M5.Rtc.isEnabled()) return false;
+  m5::rtc_datetime_t w;
+  w.date.year    = utcTm.tm_year + 1900;
+  w.date.month   = utcTm.tm_mon + 1;
+  w.date.date    = utcTm.tm_mday;
+  w.date.weekDay = utcTm.tm_wday;
+  w.time.hours   = utcTm.tm_hour;
+  w.time.minutes = utcTm.tm_min;
+  w.time.seconds = utcTm.tm_sec;
+  M5.Rtc.setDateTime(w);
+
+  m5::rtc_datetime_t r;
+  if (!rtcReadUTC(r)) return false;
+  if (r.date.year != w.date.year || r.date.month != w.date.month
+      || r.date.date != w.date.date) return false;
+  int dw = (r.time.hours * 3600 + r.time.minutes * 60 + r.time.seconds)
+         - (w.time.hours * 3600 + w.time.minutes * 60 + w.time.seconds);
+  return dw >= -2 && dw <= 2;        // the seconds register may tick across the write
+}
+
+// Last resort: seed the system clock from the RTC. The RTC must be plausible
+// *and* actually ticking, so a stopped or garbage RTC cannot get through.
+static bool rtcSeedSystemTime() {
+  m5::rtc_datetime_t a, b;
+  if (!rtcReadUTC(a)) return false;
+  delay(1100);
+  if (!rtcReadUTC(b)) return false;
+  int ta = a.time.hours * 3600 + a.time.minutes * 60 + a.time.seconds;
+  int tb = b.time.hours * 3600 + b.time.minutes * 60 + b.time.seconds;
+  int step = tb - ta; if (step < 0) step += 86400;
+  if (step < 1 || step > 3) return false;            // not ticking, or jumped
+
+  time_t epoch = utcEpoch(b.date.year, b.date.month, b.date.date,
+                          b.time.hours, b.time.minutes, b.time.seconds);
+  if (epoch < EPOCH_2025) return false;
+  struct timeval tv = { epoch, 0 };
+  settimeofday(&tv, nullptr);
+  return true;
+}
 
 // ── Helpers ──
 static inline bool hitR(int tx, int ty, int x, int y, int w, int h) {
@@ -403,10 +554,10 @@ static void drawConfirmScreen(int32_t tz, int& state) {
   d.setTextSize(2); d.setTextColor(d.color565(0, MG::BODY, 0));
   d.drawString("Contacting time servers...", 400, 260);
   
-  // NTP sync
-  configTime(tz, 0, "pool.ntp.org", "time.google.com");
-  struct tm t; int n = 0;
-  while (!getLocalTime(&t) && n < 20) { delay(500); n++; esp_task_wdt_reset(); }
+  // NTP sync — wait for a real sync, not for getLocalTime() to look sane.
+  struct tm t;
+  bool synced = ntpSync((uint32_t)tz, 20000);
+  if (synced) getLocalTime(&t);
   
   // Show result
   d.fillScreen(TFT_BLACK);
@@ -414,14 +565,13 @@ static void drawConfirmScreen(int32_t tz, int& state) {
   d.setTextFont(2); d.setTextSize(2); d.setTextColor(d.color565(0, MG::TITLE, 0));
   d.drawString("Confirm Current Time", 20, 10);
   
-  if (getLocalTime(&t)) {
-    // ── Save UTC to hardware RTC ──
+  if (synced && getLocalTime(&t)) {
+    // ── Save UTC to hardware RTC (verified — see rtcWriteUTC) ──
     { time_t utcNow = time(nullptr); struct tm utcTm; gmtime_r(&utcNow, &utcTm);
-      m5::rtc_datetime_t rdt;
-      rdt.date.year = utcTm.tm_year+1900; rdt.date.month = utcTm.tm_mon+1;
-      rdt.date.date = utcTm.tm_mday; rdt.time.hours = utcTm.tm_hour;
-      rdt.time.minutes = utcTm.tm_min; rdt.time.seconds = utcTm.tm_sec;
-      rdt.date.weekDay = utcTm.tm_wday; M5.Rtc.setDateTime(rdt); }
+      bool rtcOk = rtcWriteUTC(utcTm);
+      Serial.printf("[TIME] ntp=%04d-%02d-%02d %02d:%02d:%02d rtc_write=%s\n",
+        t.tm_year+1900, t.tm_mon+1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec,
+        rtcOk ? "ok" : "FAILED"); }
     char buf[64];
     snprintf(buf, sizeof(buf), "%04d-%02d-%02d  %02d:%02d:%02d",
       t.tm_year+1900, t.tm_mon+1, t.tm_mday,
@@ -703,13 +853,30 @@ void reconnectWifi() {
     prefs.putString("ssid", g_ssid); prefs.putString("pass", g_pass);
     prefs.putInt("tz", g_tzOffset); prefs.putBool("setup", true);
     prefs.end(); }
+  g_tzCache = g_tzOffset;             // the clock reads RAM, not NVS
   delay(100); esp_task_wdt_reset();
 }
+bool wifiHasCreds() {
+  Preferences prefs; prefs.begin("cyberclock", true);
+  bool setup = prefs.getBool("setup", false);
+  String ssid = prefs.getString("ssid", "");
+  prefs.end();
+  return setup && ssid.length() > 0;
+}
+
+// Can the RTC date the time at all right now? Used to decide whether a failed
+// network sync should still boot into the clock.
+bool timeRtcPlausible() {
+  m5::rtc_datetime_t r;
+  return rtcReadUTC(r);
+}
+
 bool autoConnectAndSync() {
   Preferences prefs; prefs.begin("cyberclock", true);
   String ssid = prefs.getString("ssid", ""); String pass = prefs.getString("pass", "");
   int32_t tz = prefs.getInt("tz", 28800); bool setup = prefs.getBool("setup", false);
   prefs.end();
+  g_tzCache = tz;                     // keep the clock's RAM copy in sync
   if (!setup || ssid.length() == 0) return false;
   if (!initHostedWifi()) return false;
 
@@ -747,28 +914,22 @@ bool autoConnectAndSync() {
   d.drawString("Matrix Rain", 20, 10);
   d.drawString("Syncing time from internet...", 380, 300);
 
-  configTime(tz, 0, "pool.ntp.org", "time.google.com");
-  struct tm t; int ntpTries = 0;
-  while (!getLocalTime(&t) && ntpTries < 30) { delay(500); ntpTries++; esp_task_wdt_reset(); }
+  struct tm t;
+  if (!ntpSync((uint32_t)tz, 20000) || !getLocalTime(&t)) {
+    Serial.printf("[TIME] NTP sync failed (status=%d)\n", (int)sntp_get_sync_status());
+    return false;
+  }
+  g_tzOffset = tz;
 
-  if (!getLocalTime(&t)) { return false; }
-
-  // ── Save UTC to hardware RTC ──
+  // ── Save UTC to hardware RTC (verified) ──
   time_t utcNow = time(nullptr);
   struct tm utcTm;
   gmtime_r(&utcNow, &utcTm);
-  {
-    m5::rtc_datetime_t rdt;
-    rdt.date.year = utcTm.tm_year + 1900;
-    rdt.date.month = utcTm.tm_mon + 1;
-    rdt.date.date = utcTm.tm_mday;
-    rdt.time.hours = utcTm.tm_hour;
-    rdt.time.minutes = utcTm.tm_min;
-    rdt.time.seconds = utcTm.tm_sec;
-    rdt.date.weekDay = utcTm.tm_wday;
-    M5.Rtc.setDateTime(rdt);
-    g_tzOffset = tz;
-  }
+  bool rtcOk = rtcWriteUTC(utcTm);
+  Serial.printf("[TIME] ntp=%04d-%02d-%02d %02d:%02d:%02d  utc=%02d:%02d  rtc=%s write=%s\n",
+    t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec,
+    utcTm.tm_hour, utcTm.tm_min,
+    M5.Rtc.isEnabled() ? "on" : "off", rtcOk ? "ok" : "FAILED");
 
   // ── Show time confirmation (blocking) ──
   d.fillScreen(TFT_BLACK);
@@ -776,7 +937,7 @@ bool autoConnectAndSync() {
 
   char buf[64];
   snprintf(buf, sizeof(buf), "%04d-%02d-%02d  %02d:%02d:%02d",
-    utcTm.tm_year + 1900, utcTm.tm_mon + 1, utcTm.tm_mday,
+    t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
     t.tm_hour, t.tm_min, t.tm_sec);
   d.setTextFont(2); d.setTextSize(5); d.setTextColor(d.color565(MG::ACCENT_R, MG::ACCENT_G, MG::ACCENT_B));
   const int timeY = 180, timeH = 80;
@@ -835,24 +996,35 @@ bool autoConnectAndSync() {
   }
 }
 
-// ── Update clock from NVS timezone offset ──
-// Reads UTC system time (set by boot NTP) and applies saved offset.
-// No configTime/setenv/SNTP calls — completely safe for repeated use.
+// ── Clock value for the display ──
+// Derived from the system clock (a UTC epoch) plus the saved offset, so the
+// display can only ever be as wrong as the source that set the system clock.
+// The hardware RTC is NOT read here: it is only a seed, applied once when
+// nothing authoritative exists — which keeps a stale RTC out of the display.
 void updateClockFromNTP(int& h, int& m) {
-  auto dt = M5.Rtc.getDateTime();
-  // Sanity check
-  if (dt.date.year < 2025 || dt.date.year > 2099) { h = 0; m = 0; return; }
+  if (!g_timeTrusted && !g_rtcSeedTried) {
+    g_rtcSeedTried = true;                 // one attempt per boot
+    if (rtcSeedSystemTime()) {
+      g_timeTrusted = true;
+      Serial.println("[TIME] seeded from hardware RTC (no NTP)");
+    } else {
+      Serial.printf("[TIME] no valid time source (rtc=%s)\n",
+                    M5.Rtc.isEnabled() ? "unusable" : "off");
+    }
+  }
 
-  // Read timezone offset from NVS
-  Preferences prefs;
-  prefs.begin("cyberclock", true);
-  int32_t tz = prefs.getInt("tz", 28800);
-  prefs.end();
+  time_t now = time(nullptr);
+  // g_timeTrusted gates this: M5.begin() seeds the system clock from the
+  // hardware RTC, so a plausible-looking-but-garbage RTC value (e.g. 2084)
+  // would otherwise sail through a year-range check alone.
+  if (!g_timeTrusted || now < EPOCH_2025) { h = 0; m = 0; return; }
 
-  // RTC stores UTC. Add timezone offset.
-  int totalMin = dt.time.hours * 60 + dt.time.minutes + tz / 60;
-  totalMin %= (24 * 60);
-  if (totalMin < 0) totalMin += 24 * 60;
+  int32_t tz = tzSeconds();
+
+  // The epoch is UTC. Add the saved offset.
+  int totalMin = (int)((now % 86400) / 60) + (int)(tz / 60);
+  totalMin %= 1440;
+  if (totalMin < 0) totalMin += 1440;
 
   h = totalMin / 60;
   m = totalMin % 60;

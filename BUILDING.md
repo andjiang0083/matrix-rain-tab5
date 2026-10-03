@@ -110,7 +110,7 @@ The build prints `Creating binary "firmware.factory.bin"` — that is your merge
 A healthy boot looks like this — **this is the line to quote when filing a bug report**:
 
 ```
-=== MATRIX RAIN v1.3.1 (Boot NTP + RTC + confirm screen + WiFi-setup) ===
+=== MATRIX RAIN v1.3.2 (Boot NTP + RTC + confirm screen + WiFi-setup) ===
 Sprite OK
 Bitmap font: 91 chars loaded
 Ready — tap screen to cycle character sets, S=screenshot

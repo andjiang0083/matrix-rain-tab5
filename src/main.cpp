@@ -1,5 +1,5 @@
 // ────────────────────────────────────────────────────────────
-// CYBER CLOCK — M5Stack Tab5 — Matrix Rain v1.3.1
+// CYBER CLOCK — M5Stack Tab5 — Matrix Rain v1.3.2
 // 80 cols × 6 char sets, 30fps, NTP time sync, ghost-character glow clock, WiFi setup
 // ────────────────────────────────────────────────────────────
 
@@ -649,7 +649,7 @@ static void drawSetupMenu(int subState, int curItem, int brightPct) {
     d.setTextFont(2); d.setTextSize(2);
     d.setTextColor(d.color565(0, MG::TITLE, 0));
     d.drawString("Matrix Rain Clock", 40, 100);
-    d.setTextColor(d.color565(0, MG::DIM, 0)); d.drawString("v1.3.1", 40, 136);
+    d.setTextColor(d.color565(0, MG::DIM, 0)); d.drawString("v1.3.2", 40, 136);
     d.setTextColor(d.color565(0, MG::BODY, 0));
     d.drawString("M5Stack Tab5  |  ESP32-P4", 40, 180);
     d.setTextSize(1); d.setTextColor(d.color565(0, MG::FAINT, 0));
@@ -757,6 +757,12 @@ void runSetupMenu() {
 // ── Setup ──
 void setup() {
   Serial.begin(115200);
+  // Never block on USB-CDC. HWCDC's default tx timeout is 100 ms and write()
+  // allows 20 consecutive timeouts (~2 s) — so a few long lines starve the 8 s
+  // task WDT whenever a host is connected but not draining the ring (closing a
+  // serial monitor is enough), which panics with the screen full of blue. 0 =
+  // drop the bytes instead of waiting for FIFO space.
+  Serial.setTxTimeoutMs(0);
   delay(100);
 
   esp_task_wdt_config_t twdt_cfg = {
@@ -767,7 +773,7 @@ void setup() {
   esp_task_wdt_init(&twdt_cfg);
   esp_task_wdt_add(NULL);
 
-  Serial.println("=== MATRIX RAIN v1.3.1 (Boot NTP + RTC + confirm screen + WiFi-setup) ===");
+  Serial.println("=== MATRIX RAIN v1.3.2 (Boot NTP + RTC + confirm screen + WiFi-setup) ===");
   delay(500);
 
   auto cfg = M5.config();
@@ -784,9 +790,19 @@ void setup() {
     Serial.println("Sprite OK");
   }
 
-  // ── WiFi + NTP setup ──
-  if (!autoConnectAndSync()) {
+  // ── WiFi + time ──
+  // The wizard is for a first boot (no saved credentials). Once credentials
+  // exist it must not trap the boot: a failed network sync keeps the clock if
+  // the RTC can still date it, and WiFi Setup is reachable from SET → WiFi.
+  if (!wifiHasCreds()) {
     runWifiSetup();
+  } else if (!autoConnectAndSync()) {
+    if (timeRtcPlausible()) {
+      Serial.println("[TIME] boot sync failed — running on the hardware RTC");
+    } else {
+      Serial.println("[TIME] boot sync failed and the RTC has no usable date — opening WiFi setup");
+      runWifiSetup();
+    }
   }
   updateClockFromNTP(g_h, g_m);
 
@@ -856,9 +872,9 @@ void loop() {
   }
   lastFrame = now;
 
-  // ── Read RTC time (battery-backed, no WiFi needed) ──
+  // ── Refresh the clock (system clock + saved offset; no I2C traffic) ──
   static uint32_t lastTimeRead = 0;
-  if (now - lastTimeRead > 60000) {  // read RTC every 60s (cheap)
+  if (now - lastTimeRead > 5000) {   // cheap: one division, no bus access
     updateClockFromNTP(g_h, g_m);
     lastTimeRead = now;
   }
