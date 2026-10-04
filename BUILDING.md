@@ -110,7 +110,7 @@ The build prints `Creating binary "firmware.factory.bin"` — that is your merge
 A healthy boot looks like this — **this is the line to quote when filing a bug report**:
 
 ```
-=== MATRIX RAIN v1.3.2 (Boot NTP + RTC + confirm screen + WiFi-setup) ===
+=== MATRIX RAIN v1.3.3 (Boot NTP + RTC + confirm screen + WiFi-setup) ===
 Sprite OK
 Bitmap font: 91 chars loaded
 Ready — tap screen to cycle character sets, S=screenshot
@@ -185,6 +185,23 @@ PY
 ```
 
 Then build the M5Burner bundle: `matrix-rain.json` (see `m5burner/`), the `.bin`, and a README, zipped together. M5Burner's *Import Custom FW* accepts either the `.zip` or the `.json`.
+
+### Upgrading a device that already runs this firmware — keep the WiFi credentials
+
+**Do not flash a merged image at `0x0` to upgrade.** Every merged image spans the
+NVS partition at `0x9000` (the gap between `0x8000` and `0xe000` is filled with
+`0xFF`), so it erases the saved WiFi credentials and the device boots into the
+setup wizard. The bootloader and partition table do not change between releases,
+so write the **app partition only**:
+
+```bash
+python3 -m esptool --chip esp32p4 -p /dev/cu.usbmodem101 write-flash \
+  0x10000 .pio/build/tab5/firmware.bin --flash-mode dio --flash-freq 80m --flash-size 16MB
+```
+
+Flash a merged image at `0x0` only for a first install, or when the device is
+running something else entirely (e.g. retro-go) — that path starts from a clean
+NVS on purpose.
 
 ---
 

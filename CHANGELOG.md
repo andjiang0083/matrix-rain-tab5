@@ -2,6 +2,26 @@
 
 All notable changes to this project. Dates are the original build dates; version numbers follow the author's convention of small patches rather than feature milestones.
 
+## v1.3.3 — one UI kit for every settings screen (2026-10-04)
+
+The settings screens had grown six different ideas of what a button is: every page drew its own rectangles, and every page hit-tested them with its own hand-written numbers. That is exactly how a button drifts away from the tap meant to hit it. Every screen is now drawn from `src/ui_kit.h` and hit-tested from the same constants.
+
+### Changed
+
+- **New UI kit (`src/ui_kit.h`)** — title bar, back button, card, button (5 styles), list row, key cap, timezone cell, slider. Draw code and touch code share one set of geometry constants, so a button that moves takes its hit box with it.
+- **The settings menu is a card stack**, each card showing its current value (`Character Set  KATAKANA`, `Brightness  50%`, `About  v1.3.3`).
+- **Every page has a title bar and a step indicator** (`1/4` … `4/4`); sub-pages carry a back button on its own row.
+- **One confirmation screen instead of two** — the boot sync path and the WiFi wizard each carried a copy of the "Confirm Current Time" layout; both now call `confirmTimeScreen()`.
+- **WiFi list** — 12 rows with 5-step signal bars and an `OPEN` tag, `Rescan` / `Cancel` in the action row.
+- **Keyboard** — keys are kit buttons, `Connect` stays disabled (GHOST) until a password is typed, and the target SSID is the field's placeholder.
+- **Timezone grid** — 6 columns, selected cell highlighted.
+- **The version string lives in one place** (`APP_VERSION`) for the boot banner, the About page and the settings card.
+
+### Fixed — found by the pre-flash layout check, never seen on a panel
+
+- The back button overlapped the first row of the WiFi list, the SSID line on the keyboard page and the first row of the timezone grid; text would have collided on screen.
+- The password field rendered the WiFi password in clear text; it is masked now.
+
 ## v1.3.2 — time source fix + a real crash fix (2026-10-04)
 
 Found on a real Tab5: the clock showed a stale time *after* a "successful" WiFi sync, the RTC held a date of 2084-08-11 from an earlier bad write, and the device rebooted behind a blue screen shortly after a sync succeeded.

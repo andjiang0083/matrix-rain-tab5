@@ -11,6 +11,7 @@
 #include <esp_sntp.h>
 #include <sys/time.h>
 #include "matrix_gui.h"
+#include "ui_kit.h"
 
 // ── Tab5 Hosted SDIO pins ──
 static const int H_CLK = 12, H_CMD = 13, H_D0 = 11, H_D1 = 10, H_D2 = 9, H_D3 = 8, H_RST = 15;
@@ -193,25 +194,12 @@ static inline bool hitR(int tx, int ty, int x, int y, int w, int h) {
   return tx >= x && tx < x + w && ty >= y && ty < y + h;
 }
 
-static void drawTitle(const char* s) {
-  auto& d = M5.Display;
-  d.fillRect(0, 0, 1280, 48, d.color565(0, MG::TITLE_BG, 0));
-  d.setTextFont(2); d.setTextSize(2);
-  d.setTextColor(d.color565(0, MG::TITLE, 0));
-  d.drawString(s, 20, 10);
-}
+// Chrome comes from the kit: one title bar (step id right-aligned), one back
+// control below the bar — the single place the user picked.
+static void drawTitle(const char* s) { UI::bar(M5.Display, s); }
 
-// Title with step indicator (e.g. "1/4  Select Network")
-static void drawStepTitle(const char* step, const char* s) {
-  auto& d = M5.Display;
-  d.fillRect(0, 0, 1280, 48, d.color565(0, MG::TITLE_BG, 0));
-  d.setTextFont(2); d.setTextSize(2);
-  int16_t sw = d.textWidth(step);
-  d.setTextColor(d.color565(0, MG::DIM, 0));
-  d.drawString(step, 20, 10);
-  d.setTextColor(d.color565(0, MG::TITLE, 0));
-  d.drawString(s, 28 + sw, 10);
-}
+// Title with step indicator (e.g. "Select Network  1/4")
+static void drawStepTitle(const char* step, const char* s) { UI::bar(M5.Display, s, step); }
 
 static bool getTouch(int& tx, int& ty) {
   M5.update();
@@ -251,67 +239,57 @@ static void drawListScreen() {
   auto& d = M5.Display;
   d.fillScreen(TFT_BLACK);
   drawStepTitle("1/4", "Select Network");
+  // No back row here: the list needs the full height for 12 rows, so Cancel
+  // lives in the bottom action row instead.
 
-  // Scan button (secondary: subtle border)
-  d.fillRoundRect(40, 680, 160, 36, 6, d.color565(0, MG::SEC, 0));
-  d.drawRoundRect(40, 680, 160, 36, 6, d.color565(0, MG::SEC_BDR, 0));
-  d.setTextFont(2); d.setTextSize(2); d.setTextColor(d.color565(0, MG::DIM, 0));
-  d.drawString("[Scan]", 60, 688);
-
-  // Back button (very subtle, right side)
-  d.fillRoundRect(1080, 680, 160, 36, 6, d.color565(0, MG::CANCEL, 0));
-  d.drawRoundRect(1080, 680, 160, 36, 6, d.color565(0, MG::CANCEL_BDR, 0));
-  d.setTextColor(d.color565(0, MG::FAINT, 0));
-  d.drawString("Back", 1120, 688);
-
-  // Network list
-  int yy = 56;
-  for (int i = 0; i < g_scanCount && i < 12; i++) {
-    uint16_t bg = (i == g_selNet) ? d.color565(0, MG::SEL, 0) : TFT_BLACK;
-    d.fillRect(10, yy, 1260, 40, bg);
-
-    // Cursor
-    d.setTextFont(1); d.setTextSize(2); d.setTextColor(d.color565(0, MG::BRIGHT, 0));
-    d.drawString((i == g_selNet) ? ">" : " ", 10, yy + 8);
+  for (int i = 0; i < g_scanCount && i < UI::LIST_MAX_ROWS; i++) {
+    int yy = UI::rowY(i);
+    bool sel = (i == g_selNet);
+    UI::rowBg(d, yy, sel);
 
     // SSID — sanitize non-ASCII → draw □ boxes
     char clean[65]; int replPos[16];
     const String& raw = g_scanSSIDs[i];
     int rc = sanitizeSSID(clean, 64, raw.c_str(), raw.length(), replPos, 16);
-    d.setTextColor(d.color565(0, MG::BODY, 0));
-    d.drawString(clean, 30, yy + 8);
+    UI::left(d, UI::T_BODY, clean, UI::LIST_X + 36,
+             yy + (UI::ROW_H - UI::cellH(UI::T_BODY)) / 2,
+             sel ? MG::BRIGHT : MG::BODY);
 
     // Draw □ over non-ASCII replacement positions
     for (int r = 0; r < rc; r++) {
       char before[65]; strncpy(before, clean, replPos[r]); before[replPos[r]] = 0;
-      int16_t bx = 30 + d.textWidth(before);
-      d.drawRect(bx, yy + 10, 10, 14, d.color565(0, MG::REPLACE, 0));
+      UI::font(d, UI::T_BODY);
+      int16_t bx = UI::LIST_X + 36 + d.textWidth(before);
+      d.drawRect(bx, yy + 10, 14, 20, d.color565(0, MG::REPLACE, 0));
     }
 
-    // Signal bars
+    // Signal bars — 5 steps, bottom-aligned in the row
     int bars = constrain(map(g_scanRSSI[i], -90, -30, 1, 5), 1, 5);
-    for (int b = 0; b < bars; b++)
-      d.fillRect(1060 + b * 10, yy + 24 - b * 5, 8, b * 5 + 4, d.color565(0, map(b, 0, 4, MG::DIM, MG::BRIGHT), 0));
-    // Unlit bars (dim)
-    for (int b = bars; b < 5; b++)
-      d.fillRect(1060 + b * 10, yy + 24 - b * 5, 8, b * 5 + 4, d.color565(0, MG::LINE, 0));
+    for (int b = 0; b < 5; b++) {
+      int hgt = b * 5 + 6;
+      uint16_t c = (b < bars) ? d.color565(0, map(b, 0, 4, MG::DIM, MG::BRIGHT), 0)
+                              : d.color565(0, MG::LINE, 0);
+      d.fillRect(1080 + b * 14, yy + UI::ROW_H - 8 - hgt, 10, hgt, c);
+    }
 
     // OPEN tag
-    if (g_scanOpen[i]) {
-      d.setTextColor(d.color565(0, MG::DIM, 0));
-      d.drawString("OPEN", 1120, yy + 8);
-    }
-    yy += 44;
+    if (g_scanOpen[i])
+      UI::right(d, UI::T_SMALL, "OPEN", UI::LIST_X + UI::LIST_W - 24,
+                yy + (UI::ROW_H - UI::cellH(UI::T_SMALL)) / 2, MG::DIM);
   }
+
+  UI::button(d, UI::ACT_X,  UI::ACT_Y, UI::ACT_W, UI::ACT_H, "Rescan", UI::SECONDARY);
+  UI::button(d, UI::ACT_XR, UI::ACT_Y, UI::ACT_W, UI::ACT_H, "Cancel", UI::GHOST);
 }
 
 static void handleListScreen(int& state) {
   int tx, ty;
   if (!getTouch(tx, ty)) return;
-  if (hitR(tx, ty, 40, 680, 160, 36)) { state = ST_WIFI_SCAN; waitRelease(); return; }
-  if (hitR(tx, ty, 1080, 680, 160, 36)) { state = ST_DONE; waitRelease(); return; }
-  int idx = (ty - 56) / 44;
-  if (idx >= 0 && idx < g_scanCount && idx < 12) {
+  if (hitR(tx, ty, UI::ACT_XR, UI::ACT_Y, UI::ACT_W, UI::ACT_H)) { state = ST_DONE; waitRelease(); return; }
+  if (hitR(tx, ty, UI::ACT_X, UI::ACT_Y, UI::ACT_W, UI::ACT_H)) { state = ST_WIFI_SCAN; waitRelease(); return; }
+  if (ty < UI::LIST_TOP) return;
+  int idx = (ty - UI::LIST_TOP) / UI::ROW_PITCH;
+  if (idx >= 0 && idx < g_scanCount && idx < UI::LIST_MAX_ROWS) {
     g_selNet = idx;
     strncpy(g_ssid, g_scanSSIDs[idx].c_str(), sizeof(g_ssid)-1);
     g_ssid[sizeof(g_ssid)-1] = 0;
@@ -323,151 +301,129 @@ static void handleListScreen(int& state) {
 
 // ── Keyboard ──
 static const int K_SZ = 108, K_GAP = 6;
-static const int K_BASE_Y = 152;
+static const int K_BASE_Y = 216;                       // keys start below title + field
+static const int K_FIELD_X = 40, K_FIELD_Y = 140, K_FIELD_W = 1200, K_FIELD_H = 64;
+static const int K_TEXT_X = K_FIELD_X + 28;
+static const int K_TEXT_Y = K_FIELD_Y + (K_FIELD_H - 24) / 2;
 static const char* K_ALPHA[] = { "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM" };
 static const int K_ALPHA_LEN[] = { 10, 9, 7 };
-static const char* K_NUM[] = { "1234567890", "-_@#.$%&+=", ",/:;\"'!?()" };
+static const char* K_NUM[] = { "1234567890", "-_@#.$%+=", ",/:;\"'!?()" };
 static const int K_NUM_LEN[] = { 10, 10, 10 };
+
+// One source of truth for the bottom key bar: the draw code and the hit test
+// both call this, so a tap can never land on the wrong key after a layout tweak.
+struct KeyBar { int y, shiftX, modeX, spaceX, spaceW, delX, connX, connW; };
+static KeyBar keyBar() {
+  KeyBar k{};
+  k.y = K_BASE_Y + 3 * (K_SZ + K_GAP);
+  int lx = K_FIELD_X;
+  k.shiftX = lx; lx += 106;                            // 100 wide + 6 gap
+  k.modeX  = lx; lx += 106;
+  k.connW  = 240; k.connX = 1280 - K_FIELD_X - k.connW;
+  k.delX   = k.connX - 6 - 100;
+  k.spaceX = lx; k.spaceW = k.delX - 6 - lx;
+  return k;
+}
+
+// Same idea for the three letter/number rows.
+static void keyRect(int r, int k, int& x, int& y) {
+  const int* lens = g_alphaMode ? K_ALPHA_LEN : K_NUM_LEN;
+  y = K_BASE_Y + r * (K_SZ + K_GAP);
+  int totalW = lens[r] * K_SZ + (lens[r] - 1) * K_GAP;
+  x = (1280 - totalW) / 2 + k * (K_SZ + K_GAP);
+}
+
+static void drawPasswordOnly();   // defined below; the full keyboard redraw reuses it
 
 static void drawKeyboardScreen() {
   auto& d = M5.Display;
   d.fillScreen(TFT_BLACK);
   drawStepTitle("2/4", "Enter Password");
-  d.setTextFont(1); d.setTextSize(2); d.setTextColor(d.color565(0, MG::DIM, 0));
-  d.drawString(g_ssid, 20, 56);
-  // Password field
-  d.fillRect(18, 82, 1244, 56, d.color565(0, MG::FIELD, 0));
-  d.drawRect(18, 82, 1244, 56, d.color565(0, MG::LINE, 0));
-  d.setTextFont(1); d.setTextSize(2);
-  if (g_passLen == 0) {
-    d.setTextColor(d.color565(0, MG::DIM, 0)); d.drawString("tap keys above", 30, 98);
-  } else {
-    d.setTextColor(d.color565(0, MG::BODY, 0));
-    char buf[65]; int len = g_passLen < 64 ? g_passLen : 64;
-    memcpy(buf, g_pass, len); buf[len] = 0;
-    if (d.textWidth(buf) > 1220) {
-      int show = 50; if (show > len) show = len;
-      memcpy(buf, g_pass + len - show, show);
-      memmove(buf + 3, buf, show);
-      buf[0]='.'; buf[1]='.'; buf[2]='.'; buf[show+3]=0;
-    }
-    d.drawString(buf, 24, 98);
-  }
+  UI::back(d, "< CANCEL");
+  drawPasswordOnly();
+
   // Letter / number keys
-  const char** rows; const int* rowLens; int numRows = 3;
-  if (g_alphaMode) { rows = K_ALPHA; rowLens = K_ALPHA_LEN; }
-  else             { rows = K_NUM;   rowLens = K_NUM_LEN; }
-  for (int r = 0; r < numRows; r++) {
-    int yy = K_BASE_Y + r * (K_SZ + K_GAP);
-    int totalW = rowLens[r] * K_SZ + (rowLens[r] - 1) * K_GAP;
-    int xx = (1280 - totalW) / 2;
-    for (int k = 0; k < rowLens[r]; k++) {
-      char ch = rows[r][k];
-      if (g_alphaMode && g_shift) ch = toupper(ch);
-      d.fillRoundRect(xx, yy, K_SZ, K_SZ, 6, d.color565(0, MG::HOVER, 0));
-      d.drawRoundRect(xx, yy, K_SZ, K_SZ, 6, d.color565(0, MG::LINE, 0));
-      d.setTextColor(d.color565(0, MG::BODY, 0)); d.setTextSize(2); d.setTextFont(1);
-      char lbl[2] = {ch, 0};
-      int16_t tw = d.textWidth(lbl);
-      d.drawString(lbl, xx + (K_SZ - tw) / 2, yy + (K_SZ - 20) / 2);
-      xx += K_SZ + K_GAP;
+  const char** rows = g_alphaMode ? K_ALPHA : K_NUM;
+  const int* lens   = g_alphaMode ? K_ALPHA_LEN : K_NUM_LEN;
+  for (int r = 0; r < 3; r++) {
+    for (int k = 0; k < lens[r]; k++) {
+      int xx, yy; keyRect(r, k, xx, yy);
+      char lbl[2] = { rows[r][k], 0 };
+      UI::button(d, xx, yy, K_SZ, K_SZ, lbl, UI::KEY, UI::T_BODY);
     }
   }
+
   // Bottom row
-  int by = K_BASE_Y + numRows * (K_SZ + K_GAP);
-  int lx = 20;
-  // Shift
-  uint16_t shiftBg = g_shift ? d.color565(0, MG::KB_SHIFT, 0) : d.color565(0, MG::SEC, 0);
-  d.fillRoundRect(lx, by, 80, K_SZ, 6, shiftBg);
-  d.drawRoundRect(lx, by, 80, K_SZ, 6, d.color565(0, MG::SEC_BDR, 0));
-  d.setTextColor(d.color565(0, MG::BRIGHT, 0)); d.drawString("^", lx + 28, by + (K_SZ-20)/2);
-  lx += 86;
-  // 123 toggle
-  d.fillRoundRect(lx, by, 100, K_SZ, 6, d.color565(MG::KB_MODE_R, MG::KB_MODE_G, MG::KB_MODE_B));
-  d.drawRoundRect(lx, by, 100, K_SZ, 6, d.color565(0, MG::SEC_BDR, 0));
-  d.setTextColor(d.color565(0, MG::BODY, 0)); d.drawString(g_alphaMode?"123#":"ABC", lx+12, by+(K_SZ-20)/2);
-  lx += 106;
-  // Space
-  int remain = 1280 - lx - 20 - 106 - 180;
-  d.fillRoundRect(lx, by, remain, K_SZ, 6, d.color565(0, MG::SEC, 0));
-  d.drawRoundRect(lx, by, remain, K_SZ, 6, d.color565(0, MG::LINE, 0));
-  d.setTextColor(d.color565(0, MG::BODY, 0)); d.drawString("Space", lx + remain/2 - 40, by+(K_SZ-20)/2);
-  lx += remain + 6;
-  // Backspace
-  d.fillRoundRect(lx, by, 100, K_SZ, 6, d.color565(MG::KB_DEL_R, MG::SEC, 0));
-  d.drawRoundRect(lx, by, 100, K_SZ, 6, d.color565(0, MG::SEC_BDR, 0));
-  d.setTextColor(d.color565(0, MG::DIM, 0)); d.drawString("DEL", lx + 16, by+(K_SZ-20)/2);
-  lx += 106;
-  // Connect (primary button)
-  d.fillRoundRect(lx, by, 180, K_SZ, 6, d.color565(0, MG::BTN, 0));
-  d.drawRoundRect(lx, by, 180, K_SZ, 6, d.color565(0, MG::BTN_BDR, 0));
-  d.setTextColor(d.color565(0, MG::BRIGHT, 0)); d.drawString("Connect", lx+14, by+(K_SZ-20)/2);
-  // Cancel (low-contrast)
-  d.fillRoundRect(20, 660, 120, 44, 6, d.color565(0, MG::CANCEL, 0));
-  d.drawRoundRect(20, 660, 120, 44, 6, d.color565(0, MG::CANCEL_BDR, 0));
-  d.setTextColor(d.color565(0, MG::DIM, 0)); d.setTextSize(2); d.drawString("Cancel", 36, 672);
+  KeyBar kb = keyBar();
+  UI::button(d, kb.shiftX, kb.y, 100, K_SZ, "SHFT", g_shift ? UI::PRIMARY : UI::SECONDARY, UI::T_BODY);
+  UI::button(d, kb.modeX,  kb.y, 100, K_SZ, g_alphaMode ? "123" : "ABC", UI::SECONDARY, UI::T_BODY);
+  UI::button(d, kb.spaceX, kb.y, kb.spaceW, K_SZ, "SPACE", UI::SECONDARY, UI::T_BODY);
+  UI::button(d, kb.delX,   kb.y, 100, K_SZ, "DEL", UI::SECONDARY, UI::T_BODY);
+  UI::button(d, kb.connX,  kb.y, kb.connW, K_SZ, "Connect",
+             g_passLen > 0 ? UI::PRIMARY : UI::GHOST, UI::T_BODY);
 }
 
 // ── Draw only the password field (fast, no flicker) ──
 static void drawPasswordOnly() {
   auto& d = M5.Display;
-  d.fillRect(18, 82, 1244, 56, d.color565(0, MG::FIELD, 0));
-  d.drawRect(18, 82, 1244, 56, d.color565(0, MG::LINE, 0));
-  d.setTextFont(1); d.setTextSize(2);
+  d.fillRoundRect(K_FIELD_X, K_FIELD_Y, K_FIELD_W, K_FIELD_H, 8, d.color565(0, MG::FIELD, 0));
+  d.drawRoundRect(K_FIELD_X, K_FIELD_Y, K_FIELD_W, K_FIELD_H, 8, d.color565(0, MG::LINE, 0));
+  UI::font(d, UI::T_BODY);
   if (g_passLen == 0) {
-    d.setTextColor(d.color565(0, MG::DIM, 0)); d.drawString("tap keys above", 30, 98);
+    char ph[80];
+    snprintf(ph, sizeof(ph), "password for %s", g_ssid);
+    UI::left(d, UI::T_BODY, ph, K_TEXT_X, K_TEXT_Y, MG::DIM);
   } else {
-    d.setTextColor(d.color565(0, MG::BODY, 0));
+    // masked: never leave the network password legible on the panel
     char buf[65]; int len = g_passLen < 64 ? g_passLen : 64;
-    memcpy(buf, g_pass, len); buf[len] = 0;
-    if (d.textWidth(buf) > 1220) {
+    for (int i = 0; i < len; i++) buf[i] = '*';
+    buf[len] = 0;
+    if (d.textWidth(buf) > K_FIELD_W - 56) {
       int show = 50; if (show > len) show = len;
-      memcpy(buf, g_pass + len - show, show);
-      memmove(buf + 3, buf, show);
-      buf[0]='.'; buf[1]='.'; buf[2]='.'; buf[show+3]=0;
+      buf[show] = 0;                       // keep the newest characters visible
     }
-    d.drawString(buf, 24, 98);
+    UI::left(d, UI::T_BODY, buf, K_TEXT_X, K_TEXT_Y, MG::BODY);
   }
 }
 
 static void handleKeyboard(int& state) {
   int tx, ty;
   if (!getTouch(tx, ty)) return;
-  if (hitR(tx, ty, 20, 660, 120, 44)) { state = ST_WIFI_LIST; waitRelease(); return; }
-  int by = K_BASE_Y + 3 * (K_SZ + K_GAP);
-  int lx = 20;
-  // Shift  → full redraw
-  if (hitR(tx, ty, lx, by, 80, K_SZ)) { g_shift = !g_shift; g_kbFull = true; waitRelease(); return; }
-  lx += 86;
+  if (UI::backHit(tx, ty)) { state = ST_WIFI_LIST; waitRelease(); return; }
+  KeyBar kb = keyBar();
+  // Shift  → full redraw (the key itself changes state)
+  if (hitR(tx, ty, kb.shiftX, kb.y, 100, K_SZ)) { g_shift = !g_shift; g_kbFull = true; waitRelease(); return; }
   // 123 toggle → full redraw
-  if (hitR(tx, ty, lx, by, 100, K_SZ)) { g_alphaMode = !g_alphaMode; g_shift = false; g_kbFull = true; waitRelease(); return; }
-  lx += 106;
+  if (hitR(tx, ty, kb.modeX, kb.y, 100, K_SZ)) { g_alphaMode = !g_alphaMode; g_shift = false; g_kbFull = true; waitRelease(); return; }
   // Space → password only
-  int remain = 1280 - lx - 20 - 106 - 180;
-  if (hitR(tx, ty, lx, by, remain, K_SZ)) { if (g_passLen < 120) { g_pass[g_passLen++] = ' '; g_passDirty = true; } waitRelease(); return; }
-  lx += remain + 6;
+  if (hitR(tx, ty, kb.spaceX, kb.y, kb.spaceW, K_SZ)) {
+    if (g_passLen < 120) { g_pass[g_passLen++] = ' '; g_pass[g_passLen] = 0; g_passDirty = true; }
+    waitRelease(); return;
+  }
   // Backspace → password only
-  if (hitR(tx, ty, lx, by, 100, K_SZ)) { if (g_passLen > 0) { g_pass[--g_passLen] = 0; g_passDirty = true; } waitRelease(); return; }
-  lx += 106;
+  if (hitR(tx, ty, kb.delX, kb.y, 100, K_SZ)) {
+    if (g_passLen > 0) { g_pass[--g_passLen] = 0; g_passDirty = true; }
+    waitRelease(); return;
+  }
   // Connect → transition
-  if (hitR(tx, ty, lx, by, 180, K_SZ)) { if (g_passLen > 0) { g_pass[g_passLen] = 0; state = ST_CONNECTING; } waitRelease(); return; }
+  if (hitR(tx, ty, kb.connX, kb.y, kb.connW, K_SZ)) {
+    if (g_passLen > 0) { g_pass[g_passLen] = 0; state = ST_CONNECTING; }
+    waitRelease(); return;
+  }
   // Letter/number keys → password only
-  const char** rows; const int* rowLens;
-  if (g_alphaMode) { rows = K_ALPHA; rowLens = K_ALPHA_LEN; }
-  else             { rows = K_NUM;   rowLens = K_NUM_LEN; }
   for (int r = 0; r < 3; r++) {
-    int yy = K_BASE_Y + r * (K_SZ + K_GAP);
-    int totalW = rowLens[r] * K_SZ + (rowLens[r] - 1) * K_GAP;
-    int xx = (1280 - totalW) / 2;
-    for (int k = 0; k < rowLens[r]; k++) {
-      char ch = rows[r][k];
-      if (g_alphaMode && g_shift) ch = toupper(ch);
+    const int* lens = g_alphaMode ? K_ALPHA_LEN : K_NUM_LEN;
+    for (int k = 0; k < lens[r]; k++) {
+      int xx, yy; keyRect(r, k, xx, yy);
       if (hitR(tx, ty, xx, yy, K_SZ, K_SZ)) {
-        if (g_passLen < 120) { g_pass[g_passLen++] = ch; g_passDirty = true; }
+        char ch = g_alphaMode ? K_ALPHA[r][k] : K_NUM[r][k];
+        if (g_passLen < 120) { g_pass[g_passLen++] = ch; g_pass[g_passLen] = 0; }
+        bool wasShift = g_shift;
         if (g_alphaMode && g_shift) g_shift = false;
+        g_passDirty = true;
+        if (wasShift) g_kbFull = true;   // repaint SHFT so its state is visible
         waitRelease(); return;
       }
-      xx += K_SZ + K_GAP;
     }
   }
 }
@@ -476,73 +432,120 @@ static void handleKeyboard(int& state) {
 static void drawConnectingScreen() {
   auto& d = M5.Display;
   d.fillScreen(TFT_BLACK);
-  drawStepTitle("3/4", "Connecting...");
-  d.setTextFont(1); d.setTextSize(2);
-  d.setTextColor(d.color565(0, MG::DIM, 0));
-  char buf[128]; snprintf(buf, sizeof(buf), "\"%s\"", g_ssid);
-  d.drawString(buf, 40, 100);
-  d.setTextColor(d.color565(0, MG::BODY, 0));
-  d.drawString("Connecting...", 40, 160);
+  drawStepTitle("3/4", "Connecting");
+  UI::back(d, "< CANCEL");
+  UI::centered(d, UI::T_BIG, g_ssid, 240, MG::BODY);
   wifi_ap_record_t ap; bool connected = (esp_wifi_sta_get_ap_info(&ap) == ESP_OK);
   if (connected) {
-    d.setTextColor(d.color565(0, MG::BRIGHT, 0));
-    d.drawString("Connected!", 40, 210);
-    d.setTextColor(d.color565(0, MG::DIM, 0));
-    d.drawString("touch to continue", 40, 280);
+    UI::centered(d, UI::T_BODY, "Connected!", 310, MG::BRIGHT);
+    UI::centered(d, UI::T_BODY, "touch to continue", 356, MG::DIM);
+  } else {
+    UI::centered(d, UI::T_BODY, "connecting to the access point ...", 310, MG::DIM);
   }
-  // Cancel (low-contrast)
-  d.fillRoundRect(40, 590, 160, 40, 6, d.color565(0, MG::CANCEL, 0));
-  d.drawRoundRect(40, 590, 160, 40, 6, d.color565(0, MG::CANCEL_BDR, 0));
-  d.setTextColor(d.color565(0, MG::DIM, 0)); d.drawString("Cancel", 60, 598);
 }
 
 static void handleConnecting(int& state) {
   int tx, ty;
   if (!getTouch(tx, ty)) return;
-  if (hitR(tx, ty, 40, 590, 160, 40)) { esp_wifi_disconnect(); state = ST_WIFI_LIST; waitRelease(); return; }
+  if (UI::backHit(tx, ty)) { esp_wifi_disconnect(); state = ST_WIFI_LIST; waitRelease(); return; }
   wifi_ap_record_t ap;
   if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) { state = ST_TZ_SELECT; g_tzDirty = true; waitRelease(); }
 }
 
 // ── Screen: Timezone ──
+// Grid geometry is shared by the draw code and the hit test.
+static const int TZ_COLS = 6, TZ_BW = 190, TZ_BH = 48, TZ_GAP = 10, TZ_Y0 = 140;
+static const int TZ_DONE_X = 1280 - 24 - 240;
+static void tzCell(int i, int& x, int& y) {
+  int startX = (1280 - (TZ_COLS * TZ_BW + (TZ_COLS - 1) * TZ_GAP)) / 2;
+  x = startX + (i % TZ_COLS) * (TZ_BW + TZ_GAP);
+  y = TZ_Y0 + (i / TZ_COLS) * (TZ_BH + TZ_GAP);
+}
+
 static void drawTzScreen() {
   auto& d = M5.Display;
   d.fillScreen(TFT_BLACK);
   drawStepTitle("4/4", "Select Timezone");
-  d.setTextSize(2);
-  int cols = 6, bw = 160, bh = 40, gap = 10;
-  int startX = (1280 - (cols * bw + (cols - 1) * gap)) / 2;
-  int startY = 120;
+  UI::back(d, "< CANCEL");
   for (int i = 0; i < TZ_COUNT; i++) {
-    int bx = startX + (i % cols) * (bw + gap);
-    int by = startY + (i / cols) * (bh + gap);
+    int bx, by; tzCell(i, bx, by);
     bool sel = (i == g_tzIdx);
-    d.fillRoundRect(bx, by, bw, bh, 4, sel ? d.color565(0, MG::SEL, 0) : d.color565(0, MG::HOVER, 0));
-    d.drawRoundRect(bx, by, bw, bh, 4, sel ? d.color565(0, MG::BTN_BDR, 0) : d.color565(0, MG::LINE, 0));
-    d.setTextColor(sel ? d.color565(0, MG::BRIGHT, 0) : d.color565(0, MG::BODY, 0));
-    char lbl[16]; snprintf(lbl, sizeof(lbl), "%s%s", sel ? ">" : "", TZ_LIST[i].label);
-    d.drawString(lbl, bx + 4, by + 12);
+    d.fillRoundRect(bx, by, TZ_BW, TZ_BH, UI::RAD, d.color565(0, sel ? MG::SEL : MG::PANEL, 0));
+    d.drawRoundRect(bx, by, TZ_BW, TZ_BH, UI::RAD, d.color565(0, sel ? MG::BTN_BDR : MG::LINE, 0));
+    UI::center(d, UI::T_BODY, TZ_LIST[i].label, bx, by, TZ_BW, TZ_BH, sel ? MG::BRIGHT : MG::BODY);
   }
-  // Done button (primary)
-  d.fillRoundRect(540, 560, 200, 48, 6, d.color565(0, MG::BTN, 0));
-  d.drawRoundRect(540, 560, 200, 48, 6, d.color565(0, MG::BTN_BDR, 0));
-  d.setTextFont(2); d.setTextSize(2); d.setTextColor(d.color565(0, MG::BRIGHT, 0));
-  { int tw = d.textWidth("Done");
-    d.drawString("Done", 540 + (200 - tw) / 2, 560 + (48 - 16) / 2); }
+  UI::button(d, TZ_DONE_X, UI::ACT_Y, 240, UI::ACT_H, "Done", UI::PRIMARY);
 }
 
 static void handleTz(int& state) {
   int tx, ty;
   if (!getTouch(tx, ty)) return;
   // Done button → confirm screen (not ST_DONE)
-  if (hitR(tx, ty, 540, 560, 200, 48)) { g_tzOffset = TZ_LIST[g_tzIdx].offset; state = ST_CONFIRM; waitRelease(); return; }
-  int cols = 6, bw = 160, bh = 40, gap = 10;
-  int startX = (1280 - (cols * bw + (cols - 1) * gap)) / 2;
-  int startY = 120;
+  if (hitR(tx, ty, TZ_DONE_X, UI::ACT_Y, 240, UI::ACT_H)) {
+    g_tzOffset = TZ_LIST[g_tzIdx].offset; state = ST_CONFIRM; waitRelease(); return;
+  }
+  if (UI::backHit(tx, ty)) { state = ST_WIFI_LIST; waitRelease(); return; }
   for (int i = 0; i < TZ_COUNT; i++) {
-    int bx = startX + (i % cols) * (bw + gap);
-    int by = startY + (i / cols) * (bh + gap);
-    if (hitR(tx, ty, bx, by, bw, bh)) { g_tzIdx = i; g_tzOffset = TZ_LIST[i].offset; g_tzDirty = true; waitRelease(); return; }
+    int bx, by; tzCell(i, bx, by);
+    if (hitR(tx, ty, bx, by, TZ_BW, TZ_BH)) {
+      g_tzIdx = i; g_tzOffset = TZ_LIST[i].offset; g_tzDirty = true; waitRelease(); return;
+    }
+  }
+}
+
+// ── Time confirmation — ONE screen for the wizard and the boot path ──
+// Both call sites used to carry their own copy of this layout, which is exactly
+// how the two drifted apart before. Returns true when the user confirms.
+static bool confirmTimeScreen(struct tm& t, const char* altLabel) {
+  auto& d = M5.Display;
+  d.fillScreen(TFT_BLACK);
+  UI::bar(d, "Confirm Current Time", "SYNC");
+
+  char buf[64];
+  snprintf(buf, sizeof(buf), "%04d-%02d-%02d  %02d:%02d:%02d",
+    t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
+  UI::font(d, UI::T_CLOCK);
+  const int timeW = d.textWidth("0000-00-00  00:00:00");   // fixed max width
+  const int timeH = UI::cellH(UI::T_CLOCK);
+  const int timeY = 200;
+  const int timeX = (1280 - timeW) / 2;
+  d.setTextColor(UI::accent(d));
+  d.drawString(buf, timeX, timeY);
+
+  UI::centered(d, UI::T_BODY, "Time synced successfully", 300, MG::BODY);
+  UI::hint(d, "TIME SYNCED FROM THE INTERNET", 344);
+
+  const int PW = 240, gap = 20;
+  const int okX = 1280 - 24 - PW;
+  const int altX = okX - gap - PW;
+  UI::button(d, altX, UI::ACT_Y, PW, UI::ACT_H, altLabel, UI::SECONDARY);
+  UI::button(d, okX,  UI::ACT_Y, PW, UI::ACT_H, "Confirm",  UI::PRIMARY);
+
+  time_t lastSec = t.tm_sec;
+  while (true) {
+    M5.update(); esp_task_wdt_reset();
+
+    // Live time update — seconds tick
+    time_t now = time(nullptr);
+    struct tm cur;
+    localtime_r(&now, &cur);
+    if (cur.tm_sec != lastSec) {
+      lastSec = cur.tm_sec;
+      char nb[64];
+      snprintf(nb, sizeof(nb), "%04d-%02d-%02d  %02d:%02d:%02d",
+        cur.tm_year+1900, cur.tm_mon+1, cur.tm_mday,
+        cur.tm_hour, cur.tm_min, cur.tm_sec);
+      d.fillRect(timeX, timeY, timeW, timeH, TFT_BLACK);
+      UI::font(d, UI::T_CLOCK); d.setTextColor(UI::accent(d));
+      d.drawString(nb, timeX, timeY);
+    }
+
+    int tx, ty;
+    if (getTouch(tx, ty)) {
+      if (hitR(tx, ty, okX,  UI::ACT_Y, PW, UI::ACT_H)) { waitRelease(); return true; }
+      if (hitR(tx, ty, altX, UI::ACT_Y, PW, UI::ACT_H)) { waitRelease(); return false; }
+    }
+    delay(20);
   }
 }
 
@@ -550,20 +553,13 @@ static void handleTz(int& state) {
 static void drawConfirmScreen(int32_t tz, int& state) {
   auto& d = M5.Display;
   d.fillScreen(TFT_BLACK);
-  drawTitle("Syncing time from internet...");
-  d.setTextSize(2); d.setTextColor(d.color565(0, MG::BODY, 0));
-  d.drawString("Contacting time servers...", 400, 260);
+  UI::bar(d, "Syncing Time", "SYNC");
+  UI::centered(d, UI::T_BIG, "Contacting the time servers ...", 300, MG::BODY);
   
   // NTP sync — wait for a real sync, not for getLocalTime() to look sane.
   struct tm t;
   bool synced = ntpSync((uint32_t)tz, 20000);
   if (synced) getLocalTime(&t);
-  
-  // Show result
-  d.fillScreen(TFT_BLACK);
-  d.fillRect(0, 0, 1280, 48, d.color565(0, MG::TITLE_BG, 0));
-  d.setTextFont(2); d.setTextSize(2); d.setTextColor(d.color565(0, MG::TITLE, 0));
-  d.drawString("Confirm Current Time", 20, 10);
   
   if (synced && getLocalTime(&t)) {
     // ── Save UTC to hardware RTC (verified — see rtcWriteUTC) ──
@@ -572,87 +568,25 @@ static void drawConfirmScreen(int32_t tz, int& state) {
       Serial.printf("[TIME] ntp=%04d-%02d-%02d %02d:%02d:%02d rtc_write=%s\n",
         t.tm_year+1900, t.tm_mon+1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec,
         rtcOk ? "ok" : "FAILED"); }
-    char buf[64];
-    snprintf(buf, sizeof(buf), "%04d-%02d-%02d  %02d:%02d:%02d",
-      t.tm_year+1900, t.tm_mon+1, t.tm_mday,
-      t.tm_hour, t.tm_min, t.tm_sec);
-    d.setTextSize(5); d.setTextColor(d.color565(MG::ACCENT_R, MG::ACCENT_G, MG::ACCENT_B));
-    const int timeW = d.textWidth("0000-00-00  00:00:00");
-    const int timeY = 180, timeH = 80;
-    const int timeX = (1280 - timeW) / 2;
-    d.drawString(buf, timeX, timeY);
-    d.setTextSize(2); d.setTextColor(d.color565(0, MG::BODY, 0));
-    d.drawString("Time synced successfully", 440, 320);
 
-    // Confirm (primary) + Reselect (secondary) buttons
-    d.setTextFont(2);
-    const int btnW = 240, btnH = 52, btnGap = 60;
-    int cx = 1280 / 2;
-    int bx1 = cx - btnW - btnGap / 2;
-    int bx2 = cx + btnGap / 2;
-    int by = 440;
-
-    d.fillRoundRect(bx1, by, btnW, btnH, 6, d.color565(0, MG::BTN, 0));
-    d.drawRoundRect(bx1, by, btnW, btnH, 6, d.color565(0, MG::BTN_BDR, 0));
-    d.setTextSize(2); d.setTextColor(d.color565(0, MG::BRIGHT, 0));
-    { int tw = d.textWidth("Confirm");
-      d.drawString("Confirm", bx1 + (btnW - tw) / 2, by + (btnH - 16) / 2); }
-
-    d.fillRoundRect(bx2, by, btnW, btnH, 6, d.color565(0, MG::SEC, 0));
-    d.drawRoundRect(bx2, by, btnW, btnH, 6, d.color565(0, MG::SEC_BDR, 0));
-    d.setTextColor(d.color565(0, MG::DIM, 0));
-    { int tw = d.textWidth("Reselect");
-      d.drawString("Reselect", bx2 + (btnW - tw) / 2, by + (btnH - 16) / 2); }
-
-    time_t lastSec = t.tm_sec;
-
-    while (true) {
-      M5.update(); esp_task_wdt_reset();
-
-      // Live time update — seconds tick
-      time_t now = time(nullptr);
-      struct tm cur;
-      localtime_r(&now, &cur);
-      if (cur.tm_sec != lastSec) {
-        lastSec = cur.tm_sec;
-        char nb[64];
-        snprintf(nb, sizeof(nb), "%04d-%02d-%02d  %02d:%02d:%02d",
-          cur.tm_year+1900, cur.tm_mon+1, cur.tm_mday,
-          cur.tm_hour, cur.tm_min, cur.tm_sec);
-        d.fillRect(timeX, timeY, timeW, timeH, TFT_BLACK);
-        d.setTextFont(2); d.setTextSize(5); d.setTextColor(d.color565(MG::ACCENT_R, MG::ACCENT_G, MG::ACCENT_B));
-        d.drawString(nb, timeX, timeY);
-      }
-
-      int tx, ty;
-      if (getTouch(tx, ty)) {
-        if (hitR(tx, ty, bx1, by, btnW, btnH)) { waitRelease(); state = ST_DONE; return; }
-        if (hitR(tx, ty, bx2, by, btnW, btnH)) { waitRelease(); state = ST_TZ_SELECT; g_tzDirty = true; return; }
-      }
-      delay(20);
-    }
+    // Same confirmation screen the boot path shows.
+    state = confirmTimeScreen(t, "Reselect") ? ST_DONE : ST_TZ_SELECT;
+    g_tzDirty = true;
   } else {
-    // NTP failed → Retry (warning tone)
-    d.setTextSize(2); d.setTextColor(d.color565(MG::WARN_R, MG::WARN_G, 0));
-    d.drawString("NTP time sync failed!", (1280 - d.textWidth("NTP time sync failed!")) / 2, 260);
-    d.setTextSize(1); d.setTextColor(d.color565(0, MG::DIM, 0));
-    d.drawString("Touch below to retry", (1280 - d.textWidth("Touch below to retry")) / 2, 320);
+    // NTP failed → offer a retry, in the kit's warning style
+    d.fillScreen(TFT_BLACK);
+    UI::bar(d, "Time Sync Failed", "SYNC");
+    UI::centered(d, UI::T_BIG, "NTP time sync failed", 260, MG::WARN_G);
+    UI::hint(d, "check the network, then retry", 320);
 
-    d.setTextFont(2);
-    const int btnW = 300, btnH = 52;
-    int bx = (1280 - btnW) / 2, by = 440;
-    d.fillRoundRect(bx, by, btnW, btnH, 6, d.color565(0, MG::WARN_BG, 0));
-    d.drawRoundRect(bx, by, btnW, btnH, 6, d.color565(0, MG::SEC_BDR, 0));
-    d.setTextSize(2); d.setTextColor(d.color565(0, MG::WARN_G, 0));
-    { int tw = d.textWidth("Retry");
-      d.drawString("Retry", bx + (btnW - tw) / 2, by + (btnH - 16) / 2); }
+    const int bx = 1280 - 24 - 240;
+    UI::button(d, bx, UI::ACT_Y, 240, UI::ACT_H, "Retry", UI::WARN);
 
     while (true) {
       M5.update(); esp_task_wdt_reset();
       int tx, ty;
-      if (getTouch(tx, ty)) {
-        if (hitR(tx, ty, bx, by, btnW, btnH)) { waitRelease();
-          state = ST_TZ_SELECT; g_tzDirty = true; return; }
+      if (getTouch(tx, ty) && hitR(tx, ty, bx, UI::ACT_Y, 240, UI::ACT_H)) {
+        waitRelease(); state = ST_TZ_SELECT; g_tzDirty = true; return;
       }
       delay(20);
     }
@@ -882,13 +816,9 @@ bool autoConnectAndSync() {
 
   auto& d = M5.Display;
   d.fillScreen(TFT_BLACK);
-  d.fillRect(0, 0, 1280, 48, d.color565(0, MG::TITLE_BG, 0));
-  d.setTextFont(2); d.setTextSize(2); d.setTextColor(d.color565(0, MG::TITLE, 0));
-  d.drawString("Matrix Rain", 20, 10);
-  d.setTextSize(2); d.setTextColor(d.color565(0, MG::BODY, 0));
-  d.drawString("Connecting to WiFi...", 440, 300);
-  d.setTextSize(1); d.setTextColor(d.color565(0, MG::DIM, 0));
-  d.drawString(ssid.c_str(), 480, 340);
+  UI::bar(d, "Matrix Rain");
+  UI::centered(d, UI::T_BIG, "Connecting to WiFi ...", 300, MG::BODY);
+  UI::hint(d, ssid.c_str(), 350);
 
   wifi_config_t cfg = {};
   strlcpy((char*)cfg.sta.ssid, ssid.c_str(), sizeof(cfg.sta.ssid));
@@ -909,10 +839,8 @@ bool autoConnectAndSync() {
   if (!connected) return false;
 
   d.fillScreen(TFT_BLACK);
-  d.fillRect(0, 0, 1280, 48, d.color565(0, MG::TITLE_BG, 0));
-  d.setTextSize(2); d.setTextColor(d.color565(0, MG::TITLE, 0));
-  d.drawString("Matrix Rain", 20, 10);
-  d.drawString("Syncing time from internet...", 380, 300);
+  UI::bar(d, "Matrix Rain");
+  UI::centered(d, UI::T_BIG, "Syncing time from the internet ...", 300, MG::BODY);
 
   struct tm t;
   if (!ntpSync((uint32_t)tz, 20000) || !getLocalTime(&t)) {
@@ -931,69 +859,8 @@ bool autoConnectAndSync() {
     utcTm.tm_hour, utcTm.tm_min,
     M5.Rtc.isEnabled() ? "on" : "off", rtcOk ? "ok" : "FAILED");
 
-  // ── Show time confirmation (blocking) ──
-  d.fillScreen(TFT_BLACK);
-  drawTitle("Matrix Rain");
-
-  char buf[64];
-  snprintf(buf, sizeof(buf), "%04d-%02d-%02d  %02d:%02d:%02d",
-    t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
-    t.tm_hour, t.tm_min, t.tm_sec);
-  d.setTextFont(2); d.setTextSize(5); d.setTextColor(d.color565(MG::ACCENT_R, MG::ACCENT_G, MG::ACCENT_B));
-  const int timeY = 180, timeH = 80;
-  const int timeW = d.textWidth("0000-00-00  00:00:00");  // fixed max width
-  const int timeX = (1280 - timeW) / 2;
-  d.drawString(buf, timeX, timeY);
-  d.setTextSize(2); d.setTextColor(d.color565(0, MG::BODY, 0));
-  d.drawString("Time synced successfully", (1280 - d.textWidth("Time synced successfully")) / 2, 320);
-  d.setTextFont(2);
-
-  // Confirm / Reselect buttons — auto-centered
-  const int btnW = 240, btnH = 52, btnGap = 60;
-  int cx = 1280 / 2;
-  int bx1 = cx - btnW - btnGap / 2;
-  int bx2 = cx + btnGap / 2;
-  int by = 440;
-
-  d.fillRoundRect(bx1, by, btnW, btnH, 6, d.color565(0, MG::BTN, 0));
-  d.drawRoundRect(bx1, by, btnW, btnH, 6, d.color565(0, MG::BTN_BDR, 0));
-  d.setTextSize(2); d.setTextColor(d.color565(0, MG::BRIGHT, 0));
-  { int tw = d.textWidth("Confirm");
-    d.drawString("Confirm", bx1 + (btnW - tw) / 2, by + (btnH - 16) / 2); }
-
-  d.fillRoundRect(bx2, by, btnW, btnH, 6, d.color565(0, MG::SEC, 0));
-  d.drawRoundRect(bx2, by, btnW, btnH, 6, d.color565(0, MG::SEC_BDR, 0));
-  d.setTextColor(d.color565(0, MG::DIM, 0));
-  { int tw = d.textWidth("Setup WiFi");
-    d.drawString("Setup WiFi", bx2 + (btnW - tw) / 2, by + (btnH - 16) / 2); }
-
-  time_t lastSec = t.tm_sec;
-
-  while (true) {
-    M5.update(); esp_task_wdt_reset();
-
-    // Live time update — seconds tick
-    time_t now = time(nullptr);
-    struct tm cur;
-    localtime_r(&now, &cur);
-    if (cur.tm_sec != lastSec) {
-      lastSec = cur.tm_sec;
-      char nb[64];
-      snprintf(nb, sizeof(nb), "%04d-%02d-%02d  %02d:%02d:%02d",
-        cur.tm_year+1900, cur.tm_mon+1, cur.tm_mday,
-        cur.tm_hour, cur.tm_min, cur.tm_sec);
-      d.fillRect(timeX, timeY, timeW, timeH, TFT_BLACK);
-      d.setTextFont(2); d.setTextSize(5); d.setTextColor(d.color565(MG::ACCENT_R, MG::ACCENT_G, MG::ACCENT_B));
-      d.drawString(nb, timeX, timeY);
-    }
-
-    int tx, ty;
-    if (getTouch(tx, ty)) {
-      if (hitR(tx, ty, bx1, by, btnW, btnH)) { waitRelease(); return true; }
-      if (hitR(tx, ty, bx2, by, btnW, btnH)) { waitRelease(); return false; }
-    }
-    delay(20);
-  }
+  // ── Show time confirmation (blocking) — the wizard's screen, verbatim ──
+  return confirmTimeScreen(t, "Setup WiFi");
 }
 
 // ── Clock value for the display ──

@@ -9,10 +9,14 @@
 #include "wifi_setup.h"
 #include "setup_menu.h"
 #include "matrix_gui.h"
+#include "ui_kit.h"
 #include <Preferences.h>
 #include <driver/ledc.h>
 #include <esp_wifi.h>
 #include <esp_task_wdt.h>
+
+// One place to bump the version: banner, About page, SET menu.
+static const char* APP_VERSION = "v1.3.3";
 
 // ── Sprite (only used for screenshots) ──
 static LGFX_Sprite canvas(&M5.Display);
@@ -381,13 +385,9 @@ static void drawRainOn(T& out) {
 static void drawSetButton() {
   auto& d = M5.Display;
   const int bx = 1170, by = 670, bw = 90, bh = 34;
-  d.fillRoundRect(bx, by, bw, bh, 4, d.color565(0, 12, 0));
-  d.drawRoundRect(bx, by, bw, bh, 4, d.color565(0, 35, 0));
-  d.setTextFont(1); d.setTextSize(1);
-  d.setTextColor(d.color565(0, 100, 0));
-  const char* lbl = "SET";
-  int16_t tw = d.textWidth(lbl);
-  d.drawString(lbl, bx + (bw - tw) / 2, by + (bh - 8) / 2);
+  d.fillRoundRect(bx, by, bw, bh, UI::RAD, d.color565(0, 12, 0));
+  d.drawRoundRect(bx, by, bw, bh, UI::RAD, d.color565(0, 35, 0));
+  UI::center(d, UI::T_SMALL, "SET", bx, by, bw, bh, 100);
 }
 
 // ── Touch handling ──
@@ -562,104 +562,55 @@ static int getIdleFps() {
   return (g_idleLevel >= 2) ? 8 : 30;  // idle at 8fps
 }
 
-// Menu item hit helper
-static bool menuTap(int tx, int ty, int y, int h) {
-  return tx >= 0 && tx < 1280 && ty >= y && ty < y + h;
+// Generic hit box — every settings screen is laid out from the kit's geometry.
+static inline bool hitBox(int tx, int ty, int x, int y, int w, int h) {
+  return tx >= x && tx < x + w && ty >= y && ty < y + h;
 }
 
 // Draw the setup menu (called only when state changes)
 // Uses direct DSI ops (d.xxx), NOT the canvas — same pattern as WiFi wizard
 static void drawSetupMenu(int subState, int curItem, int brightPct) {
   auto& d = M5.Display;
-  char csName[16];
-  int twb;
   d.fillScreen(TFT_BLACK);
-  d.fillRect(0, 0, 1280, 48, d.color565(0, MG::TITLE_BG, 0));
-  d.setTextFont(2); d.setTextSize(2); d.setTextColor(d.color565(0, MG::TITLE, 0));
-  d.drawString("SETUP", 20, 10);
 
   if (subState == 0) {
-    // ── Main menu ──
-    const char* labels[] = { "WiFi Settings", "Character Set", "Brightness", "About", "Back" };
-    const int ITEM_H = 56, LIST_TOP = 60;
+    // ── Main menu: one card per setting, value right-aligned ──
+    UI::bar(d, "SETUP");
+    const char* labels[] = { "WiFi Settings", "Character Set", "Brightness", "About", "Back to clock" };
     for (int i = 0; i < 5; i++) {
-      int yy = LIST_TOP + i * (ITEM_H + 4);
-      uint16_t bg = (i == curItem) ? d.color565(0, MG::SEL, 0) : TFT_BLACK;
-      d.fillRect(20, yy, 1240, ITEM_H, bg);
-      d.setTextFont(1); d.setTextSize(2);
-      d.setTextColor(d.color565(0, MG::BRIGHT, 0));
-      d.drawString(i == curItem ? "> " : "  ", 24, yy + 16);
-      d.setTextColor(d.color565(0, MG::BODY, 0));
-      d.drawString(labels[i], 56, yy + 16);
-      if (i == 1) {
-        snprintf(csName, sizeof(csName), "[ %s ]", g_charSets[g_curSet].name);
-        d.setTextColor(d.color565(0, MG::DIM, 0));
-        d.drawString(csName, 1160 - d.textWidth(csName), yy + 16);
-      } else if (i == 2) {
-        char b[8]; snprintf(b, sizeof(b), "%d%%", brightPct);
-        d.setTextColor(d.color565(0, MG::DIM, 0));
-        d.drawString(b, 1160 - d.textWidth(b), yy + 16);
-      }
+      char buf[24]; const char* value = nullptr;
+      if (i == 1)      { snprintf(buf, sizeof(buf), "%s", g_charSets[g_curSet].name); value = buf; }
+      else if (i == 2) { snprintf(buf, sizeof(buf), "%d%%", brightPct);              value = buf; }
+      else if (i == 3) { value = APP_VERSION; }
+      UI::card(d, UI::CARD_X, UI::cardY(i, 5), UI::CARD_W, UI::CARD_H, labels[i], value, i == curItem);
     }
   } else if (subState == 1) {
-    d.setTextSize(2); d.setTextColor(d.color565(0, MG::BODY, 0));
-    d.drawString("Character Set", 40, 100);
-    d.fillRoundRect(340, 260, 70, 56, 6, d.color565(0, MG::SEC, 0));
-    d.drawRoundRect(340, 260, 70, 56, 6, d.color565(0, MG::SEC_BDR, 0));
-    d.setTextColor(d.color565(0, MG::DIM, 0)); d.setTextSize(3);
-    d.drawString("<", 360, 268);
-    snprintf(csName, sizeof(csName), "%s", g_charSets[g_curSet].name);
-    d.setTextColor(d.color565(0, MG::BRIGHT, 0)); d.setTextSize(3);
-    d.drawString(csName, (1280 - d.textWidth(csName)) / 2, 268);
-    d.fillRoundRect(870, 260, 70, 56, 6, d.color565(0, MG::SEC, 0));
-    d.drawRoundRect(870, 260, 70, 56, 6, d.color565(0, MG::SEC_BDR, 0));
-    d.setTextColor(d.color565(0, MG::DIM, 0)); d.setTextSize(3);
-    d.drawString(">", 890, 268);
-    d.fillRoundRect(540, 480, 200, 48, 6, d.color565(0, MG::CANCEL, 0));
-    d.drawRoundRect(540, 480, 200, 48, 6, d.color565(0, MG::CANCEL_BDR, 0));
-    d.setTextSize(2); d.setTextColor(d.color565(0, MG::DIM, 0));
-    twb = d.textWidth("Back");
-    d.drawString("Back", 540 + (200 - twb) / 2, 480 + (48 - 16) / 2);
+    // ── Character Set ──
+    UI::bar(d, "Character Set", "SETUP 2/4");
+    UI::back(d);
+    UI::button(d, 300, 250, 96, 88, "<", UI::SECONDARY, UI::T_BIG);
+    UI::button(d, 884, 250, 96, 88, ">", UI::SECONDARY, UI::T_BIG);
+    UI::centered(d, UI::T_CLOCK, g_charSets[g_curSet].name,
+                 250 + (88 - UI::cellH(UI::T_CLOCK)) / 2, MG::BRIGHT);
+    UI::hint(d, "< >  cycles the glyph pool", 400);
   } else if (subState == 2) {
-    d.setTextSize(2); d.setTextColor(d.color565(0, MG::BODY, 0));
-    d.drawString("Brightness", 40, 100);
-    int barX = 240, barY = 260, barW = 800, barH = 24;
-    d.fillRoundRect(barX, barY, barW, barH, 4, d.color565(0, MG::LINE, 0));
-    int fillW = (barW * brightPct) / 100;
-    d.fillRoundRect(barX, barY, fillW, barH, 4, d.color565(0, MG::BTN_BDR, 0));
+    // ── Brightness ──
+    UI::bar(d, "Brightness", "SETUP 3/4");
+    UI::back(d);
+    UI::slider(d, 200, 240, 880, 40, brightPct);
     char bp[8]; snprintf(bp, sizeof(bp), "%d%%", brightPct);
-    d.setTextSize(3); d.setTextColor(d.color565(0, MG::BRIGHT, 0));
-    d.drawString(bp, (1280 - d.textWidth(bp)) / 2, 310);
-    d.fillRoundRect(340, 330, 80, 56, 6, d.color565(0, MG::SEC, 0));
-    d.drawRoundRect(340, 330, 80, 56, 6, d.color565(0, MG::SEC_BDR, 0));
-    d.setTextSize(3); d.setTextColor(d.color565(0, MG::DIM, 0));
-    d.drawString("-", 362, 338);
-    d.fillRoundRect(860, 330, 80, 56, 6, d.color565(0, MG::SEC, 0));
-    d.drawRoundRect(860, 330, 80, 56, 6, d.color565(0, MG::SEC_BDR, 0));
-    d.setTextSize(3); d.setTextColor(d.color565(0, MG::DIM, 0));
-    d.drawString("+", 882, 338);
-    d.setTextSize(1); d.setTextColor(d.color565(0, MG::FAINT, 0));
-    d.drawString("GPIO22 LEDC PWM 12-bit", 440, 420);
-    d.fillRoundRect(540, 500, 200, 48, 6, d.color565(0, MG::CANCEL, 0));
-    d.drawRoundRect(540, 500, 200, 48, 6, d.color565(0, MG::CANCEL_BDR, 0));
-    d.setTextSize(2); d.setTextColor(d.color565(0, MG::DIM, 0));
-    twb = d.textWidth("Back");
-    d.drawString("Back", 540 + (200 - twb) / 2, 500 + (48 - 16) / 2);
+    UI::centered(d, UI::T_CLOCK, bp, 330, MG::BRIGHT);
+    UI::button(d, 200, 460, 160, 88, "-", UI::SECONDARY, UI::T_CLOCK);
+    UI::button(d, 920, 460, 160, 88, "+", UI::SECONDARY, UI::T_CLOCK);
   } else if (subState == 3) {
-    d.setTextFont(2); d.setTextSize(2);
-    d.setTextColor(d.color565(0, MG::TITLE, 0));
-    d.drawString("Matrix Rain Clock", 40, 100);
-    d.setTextColor(d.color565(0, MG::DIM, 0)); d.drawString("v1.3.2", 40, 136);
-    d.setTextColor(d.color565(0, MG::BODY, 0));
-    d.drawString("M5Stack Tab5  |  ESP32-P4", 40, 180);
-    d.setTextSize(1); d.setTextColor(d.color565(0, MG::FAINT, 0));
-    d.drawString("\"There is no spoon.\"", 40, 240);
-    d.drawString("https://github.com/andjiang0083/matrix-rain-tab5", 40, 270);
-    d.fillRoundRect(540, 480, 200, 48, 6, d.color565(0, MG::CANCEL, 0));
-    d.drawRoundRect(540, 480, 200, 48, 6, d.color565(0, MG::CANCEL_BDR, 0));
-    d.setTextSize(2); d.setTextColor(d.color565(0, MG::DIM, 0));
-    twb = d.textWidth("Back");
-    d.drawString("Back", 540 + (200 - twb) / 2, 480 + (48 - 16) / 2);
+    // ── About ──
+    UI::bar(d, "About", "SETUP 4/4");
+    UI::back(d);
+    UI::left(d, UI::T_BIG,   "Matrix Rain Clock",  80, 150, MG::TITLE);
+    UI::left(d, UI::T_BODY,  APP_VERSION,          80, 200, MG::DIM);
+    UI::left(d, UI::T_BODY,  "M5Stack Tab5  |  ESP32-P4", 80, 246, MG::BODY);
+    UI::left(d, UI::T_SMALL, "\"There is no spoon.\"",    80, 316, MG::DIM);
+    UI::left(d, UI::T_SMALL, "github.com/andjiang0083/matrix-rain-tab5", 80, 348, MG::DIM);
   }
 }
 
@@ -681,8 +632,6 @@ static bool getTouchReleased(int& tx, int& ty) {
 void runSetupMenu() {
   auto& d = M5.Display;
   enum { ITEM_WIFI=0, ITEM_CHARSET, ITEM_BRIGHT, ITEM_ABOUT, ITEM_BACK };
-  const int ITEM_H = 56;
-  const int LIST_TOP = 60;
   int curItem = 0;
   int subState = 0; // 0=menu, 1=charset, 2=brightness, 3=about
   int brightPct = getBrightness();
@@ -708,9 +657,10 @@ void runSetupMenu() {
     if (!getTouchReleased(tx, ty)) { delay(20); continue; }
 
     if (subState == 0) {
+      // Card stack — same geometry the kit drew with.
       for (int i = 0; i < 5; i++) {
-        int yy = LIST_TOP + i * (ITEM_H + 4);
-        if (menuTap(tx, ty, yy, ITEM_H)) {
+        int yy = UI::cardY(i, 5);
+        if (hitBox(tx, ty, UI::CARD_X, yy, UI::CARD_W, UI::CARD_H)) {
           curItem = i;
           if (i == ITEM_WIFI) {
             dirty = true;
@@ -724,31 +674,25 @@ void runSetupMenu() {
         }
       }
     } else if (subState == 1) {
-      if (menuTap(tx, ty, 260, 56)) {
-        if (tx > 340 && tx < 410) {  // < prev
-          g_curSet = (g_curSet - 1 + CS_COUNT) % CS_COUNT;
-          reinitRain();
-          memset(g_clockGlow, 0, sizeof(g_clockGlow));
-        } else if (tx > 870 && tx < 940) {  // > next
-          g_curSet = (g_curSet + 1) % CS_COUNT;
-          reinitRain();
-          memset(g_clockGlow, 0, sizeof(g_clockGlow));
-        }
-      }
-      if (menuTap(tx, ty, 480, 48) && tx > 540 && tx < 740) { subState = 0; dirty = true; }
+      if (hitBox(tx, ty, 300, 250, 96, 88)) {          // < prev
+        g_curSet = (g_curSet - 1 + CS_COUNT) % CS_COUNT;
+        reinitRain();
+        memset(g_clockGlow, 0, sizeof(g_clockGlow));
+      } else if (hitBox(tx, ty, 884, 250, 96, 88)) {   // > next
+        g_curSet = (g_curSet + 1) % CS_COUNT;
+        reinitRain();
+        memset(g_clockGlow, 0, sizeof(g_clockGlow));
+      } else if (UI::backHit(tx, ty)) { subState = 0; dirty = true; }
     } else if (subState == 2) {
-      if (menuTap(tx, ty, 330, 56)) {
-        if (tx > 340 && tx < 420) {  // -
-          brightPct = constrain(brightPct - 10, 20, 100);
-          setBrightness(brightPct);
-        } else if (tx > 860 && tx < 940) {  // +
-          brightPct = constrain(brightPct + 10, 20, 100);
-          setBrightness(brightPct);
-        }
-      }
-      if (menuTap(tx, ty, 500, 48) && tx > 540 && tx < 740) { subState = 0; dirty = true; }
+      if (hitBox(tx, ty, 200, 460, 160, 88)) {         // -
+        brightPct = constrain(brightPct - 10, 20, 100);
+        setBrightness(brightPct);
+      } else if (hitBox(tx, ty, 920, 460, 160, 88)) {  // +
+        brightPct = constrain(brightPct + 10, 20, 100);
+        setBrightness(brightPct);
+      } else if (UI::backHit(tx, ty)) { subState = 0; dirty = true; }
     } else if (subState == 3) {
-      if (menuTap(tx, ty, 480, 48) && tx > 540 && tx < 740) { subState = 0; dirty = true; }
+      if (UI::backHit(tx, ty)) { subState = 0; dirty = true; }
     }
     delay(10);
   }
@@ -773,7 +717,7 @@ void setup() {
   esp_task_wdt_init(&twdt_cfg);
   esp_task_wdt_add(NULL);
 
-  Serial.println("=== MATRIX RAIN v1.3.2 (Boot NTP + RTC + confirm screen + WiFi-setup) ===");
+  Serial.printf("=== MATRIX RAIN %s (Boot NTP + RTC + confirm screen + WiFi-setup) ===\n", APP_VERSION);
   delay(500);
 
   auto cfg = M5.config();

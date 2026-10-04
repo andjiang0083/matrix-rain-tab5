@@ -1,0 +1,14 @@
+# matrix-rain-tab5 — M5Burner 发布清单
+# 固件产物在 .release/ 下（文件名不含 merged，check_merged.py 的默认通配抓不到，需显式传路径）
+project: matrix-rain-tab5-public
+platform_entries:
+  - name: Matrix Rain Clock — M5Stack Tab5
+    device: Tab5
+    category: Display & Art
+    version: "1.3.2"
+    bin: .release/matrix-rain-tab5-v1.3.2.bin
+    cover: releases/cover-1280x720-matrix-rain-clock-m5stack-tab5-tab5.png
+    project_link: "https://github.com/andjiang0083/matrix-rain-tab5"
+    m5burner_firmware_id: "1897200000000000841"
+    m5burner_version_id: "2106435810644860929"   # v1.3.2, PENDING 审核
+    github_release: "https://github.com/andjiang0083/matrix-rain-tab5/releases/tag/v1.3.2"
