@@ -16,7 +16,7 @@
 #include <esp_task_wdt.h>
 
 // One place to bump the version: banner, About page, SET menu.
-static const char* APP_VERSION = "v1.3.3";
+static const char* APP_VERSION = "v1.3.4";
 
 // ── Sprite (only used for screenshots) ──
 static LGFX_Sprite canvas(&M5.Display);

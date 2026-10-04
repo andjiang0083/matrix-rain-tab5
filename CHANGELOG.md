@@ -2,6 +2,19 @@
 
 All notable changes to this project. Dates are the original build dates; version numbers follow the author's convention of small patches rather than feature milestones.
 
+## v1.3.4 — the keyboard could not type lower-case at all (2026-10-04)
+
+Reported in [#2](https://github.com/andjiang0083/matrix-rain-tab5/issues/2) as "SHFT does not toggle to lowercase". The report was right, and it was the smaller half of the bug: the on-screen keyboard **could not produce a lower-case character at all**. The key caps were drawn from an upper-case table, and the character appended to the password was read from that same table *regardless of SHFT* — SHFT only repainted its own key. So any password containing lower-case letters (i.e. most of them) was untypable, on every release up to and including v1.3.3.
+
+### Fixed
+
+- **Letter case.** Keys type lower-case by default; `SHFT` is a one-shot modifier (it clears itself after one character, phone-keypad style) and highlights while armed. The caps show the case they will actually type, and the `123` / `abc` toggle label follows. Drawing and input now both call one `keyChar()`, so a cap and the character it types cannot disagree again.
+- **The password field shows what you typed.** It was masked in v1.3.3; on a hand-held panel the mask protected nothing and hid the one thing `SHFT` exists to control — the case of the character just typed. Typing a password you cannot read is how this bug survived a release.
+
+### Changed
+
+- Nothing else. v1.3.4 is v1.3.3 plus the keyboard fix — same UI kit, same time path, same rain engine.
+
 ## v1.3.3 — one UI kit for every settings screen (2026-10-04)
 
 The settings screens had grown six different ideas of what a button is: every page drew its own rectangles, and every page hit-tested them with its own hand-written numbers. That is exactly how a button drifts away from the tap meant to hit it. Every screen is now drawn from `src/ui_kit.h` and hit-tested from the same constants.

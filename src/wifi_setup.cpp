@@ -305,10 +305,25 @@ static const int K_BASE_Y = 216;                       // keys start below title
 static const int K_FIELD_X = 40, K_FIELD_Y = 140, K_FIELD_W = 1200, K_FIELD_H = 64;
 static const int K_TEXT_X = K_FIELD_X + 28;
 static const int K_TEXT_Y = K_FIELD_Y + (K_FIELD_H - 24) / 2;
+// Letter rows are stored upper-case; the case that actually gets typed is
+// decided at press time by keyChar(). SHFT is a ONE-SHOT modifier (it clears
+// itself after a character, phone-keypad style) and the default is lower-case,
+// because that is what most WiFi passwords are made of.
 static const char* K_ALPHA[] = { "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM" };
 static const int K_ALPHA_LEN[] = { 10, 9, 7 };
 static const char* K_NUM[] = { "1234567890", "-_@#.$%+=", ",/:;\"'!?()" };
 static const int K_NUM_LEN[] = { 10, 10, 10 };
+
+// One source of truth for "what does this key type" — the label drawn on the
+// cap and the character appended to the password both come from here, so the
+// two can never disagree. (They used to: the keys were drawn upper-case and
+// upper-case was inserted regardless of SHFT, so a lower-case password was
+// impossible to type at all.)
+static char keyChar(int r, int k) {
+  char c = g_alphaMode ? K_ALPHA[r][k] : K_NUM[r][k];
+  if (g_alphaMode && !g_shift && c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
+  return c;
+}
 
 // One source of truth for the bottom key bar: the draw code and the hit test
 // both call this, so a tap can never land on the wrong key after a layout tweak.
@@ -342,13 +357,12 @@ static void drawKeyboardScreen() {
   UI::back(d, "< CANCEL");
   drawPasswordOnly();
 
-  // Letter / number keys
-  const char** rows = g_alphaMode ? K_ALPHA : K_NUM;
-  const int* lens   = g_alphaMode ? K_ALPHA_LEN : K_NUM_LEN;
+  // Letter / number keys — the cap shows the case it will type
+  const int* lens = g_alphaMode ? K_ALPHA_LEN : K_NUM_LEN;
   for (int r = 0; r < 3; r++) {
     for (int k = 0; k < lens[r]; k++) {
       int xx, yy; keyRect(r, k, xx, yy);
-      char lbl[2] = { rows[r][k], 0 };
+      char lbl[2] = { keyChar(r, k), 0 };
       UI::button(d, xx, yy, K_SZ, K_SZ, lbl, UI::KEY, UI::T_BODY);
     }
   }
@@ -356,7 +370,7 @@ static void drawKeyboardScreen() {
   // Bottom row
   KeyBar kb = keyBar();
   UI::button(d, kb.shiftX, kb.y, 100, K_SZ, "SHFT", g_shift ? UI::PRIMARY : UI::SECONDARY, UI::T_BODY);
-  UI::button(d, kb.modeX,  kb.y, 100, K_SZ, g_alphaMode ? "123" : "ABC", UI::SECONDARY, UI::T_BODY);
+  UI::button(d, kb.modeX,  kb.y, 100, K_SZ, g_alphaMode ? "123" : "abc", UI::SECONDARY, UI::T_BODY);
   UI::button(d, kb.spaceX, kb.y, kb.spaceW, K_SZ, "SPACE", UI::SECONDARY, UI::T_BODY);
   UI::button(d, kb.delX,   kb.y, 100, K_SZ, "DEL", UI::SECONDARY, UI::T_BODY);
   UI::button(d, kb.connX,  kb.y, kb.connW, K_SZ, "Connect",
@@ -374,15 +388,19 @@ static void drawPasswordOnly() {
     snprintf(ph, sizeof(ph), "password for %s", g_ssid);
     UI::left(d, UI::T_BODY, ph, K_TEXT_X, K_TEXT_Y, MG::DIM);
   } else {
-    // masked: never leave the network password legible on the panel
-    char buf[65]; int len = g_passLen < 64 ? g_passLen : 64;
-    for (int i = 0; i < len; i++) buf[i] = '*';
-    buf[len] = 0;
-    if (d.textWidth(buf) > K_FIELD_W - 56) {
-      int show = 50; if (show > len) show = len;
-      buf[show] = 0;                       // keep the newest characters visible
+    // Shown in CLEAR, on purpose. This is five inches of glass in the hand of
+    // the person typing, not a screen anyone else reads, and a masked field
+    // makes the one thing SHFT exists for — the case of the character you just
+    // typed — impossible to check before Connect. (An earlier revision masked
+    // it; that hid the bug rather than showing it.)
+    const char* s = g_pass;
+    int len = g_passLen;
+    if (d.textWidth(s) > K_FIELD_W - 56) {          // long password: keep the newest visible
+      int per = 18;                                  // GLCD cell at T_BODY: 6 px × 3
+      int show = (K_FIELD_W - 56) / per;
+      s += (len > show) ? (len - show) : 0;
     }
-    UI::left(d, UI::T_BODY, buf, K_TEXT_X, K_TEXT_Y, MG::BODY);
+    UI::left(d, UI::T_BODY, s, K_TEXT_X, K_TEXT_Y, MG::BODY);
   }
 }
 
@@ -416,7 +434,7 @@ static void handleKeyboard(int& state) {
     for (int k = 0; k < lens[r]; k++) {
       int xx, yy; keyRect(r, k, xx, yy);
       if (hitR(tx, ty, xx, yy, K_SZ, K_SZ)) {
-        char ch = g_alphaMode ? K_ALPHA[r][k] : K_NUM[r][k];
+        char ch = keyChar(r, k);       // case follows SHFT, same as the cap showed
         if (g_passLen < 120) { g_pass[g_passLen++] = ch; g_pass[g_passLen] = 0; }
         bool wasShift = g_shift;
         if (g_alphaMode && g_shift) g_shift = false;
