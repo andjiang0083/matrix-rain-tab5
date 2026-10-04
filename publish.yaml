@@ -10,5 +10,5 @@ platform_entries:
     cover: releases/cover-1280x720-matrix-rain-clock-m5stack-tab5-tab5.png
     project_link: "https://github.com/andjiang0083/matrix-rain-tab5"
     m5burner_firmware_id: "1897200000000000841"
-    m5burner_version_id: "PENDING-SUBMIT"   # v1.3.4
+    m5burner_version_id: "2106681088593502209"   # v1.3.4, PENDING 审核（v1.3.2 已 PUBLISHED）
     github_release: "https://github.com/andjiang0083/matrix-rain-tab5/releases/tag/v1.3.4"
