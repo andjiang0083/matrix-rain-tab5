@@ -95,10 +95,29 @@ def main():
             print("note: could not switch to %d (%s); staying at %d" % (BAUD_HIGH, e, BAUD_LOW))
         sp.reset_input_buffer()             # drop any switch-boundary garbage
 
-        hdr_line, rest = read_until(sp, b"\n", args.timeout)
-        if not hdr_line.startswith(b"BMP:"):
-            sys.exit("expected 'BMP:<size>', got %r" % hdr_line[:40])
-        size = int(hdr_line.split(b":")[1])
+        # The device can put its own log lines on this wire at any moment (boot
+        # messages, WDT errors). Do not assume the next line is the header —
+        # scan forward for "BMP:" and report anything else we skip.
+        deadline = time.time() + args.timeout
+        size = None
+        while time.time() < deadline:
+            try:
+                line, rest = read_until(sp, b"\n", max(1.0, deadline - time.time()))
+            except TimeoutError:
+                break
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith(b"BMP:"):
+                try:
+                    size = int(line.split(b":")[1])
+                except ValueError:
+                    continue
+                break
+            print("  (device said, while we waited for the header: %r)" % line[:90])
+        if size is None:
+            sys.exit("no 'BMP:<size>' within %.0fs — is the Matrix Rain firmware running?"
+                     % args.timeout)
 
         # 4. stream the pixels (≈2.7 MB at ~90 KB/s)
         print("capturing %d bytes at %d baud…" % (size, sp.baudrate), flush=True)
