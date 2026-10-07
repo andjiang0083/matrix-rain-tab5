@@ -17,6 +17,10 @@ Built for the [M5Stack Tab5](https://docs.m5stack.com/en/core/Tab5) (ESP32-P4, R
 
 *Running on a real Tab5: 80 columns of glyph rain, and the clock emerging from the characters that pass through it. The `SET` button in the bottom-right corner is the only UI element the clock ever shows.*
 
+![The same clock in motion on the Tab5 panel](docs/screenshots/device-rain.gif)
+
+*In motion (phone clip of the panel, cropped to the screen): the columns fall continuously, and the glyphs passing through the clock face light it up.*
+
 ---
 
 ## Status

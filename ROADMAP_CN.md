@@ -42,7 +42,7 @@
 
 ## 7. 文档
 
-**已交付：** README 里的真机实拍——真机刷入后拍摄，已拉正并裁成纯屏幕 16:9。还缺一段**屏幕在动**的短视频——没有什么比"看见它在跑"更能说明问题。
+**已交付：** README 里的真机实拍 + **屏幕在动的 GIF**——都取自真机刷入后的手机录像，裁到面板、去掉了键盘/手/桌面。
 
 **开放项 →** [`area/docs`](https://github.com/andjiang0083/matrix-rain-tab5/issues?q=is%3Aissue+is%3Aopen+label%3Aarea%2Fdocs)
 
