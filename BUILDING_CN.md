@@ -197,6 +197,7 @@ PY
 | 现象 | 可能原因 | 处理 |
 |---|---|---|
 | 编译报诡异的错：找不到 `libgcc`、未知 `-m*` 选项 | 自动探测到的工具链不是 GCC 14.x（看构建日志的 `Toolchain path overridden:` 行） | 装 ESP-IDF 5.5.x 的 `riscv32-esp-elf`（第 1 节） |
+| `*** missing SConscript .../framework-arduinoespressif32-libs/esp32p4_es/pioarduino-build.py` | 平台的板定义写的是 `chip_variant = esp32p4_es`（ES 片），而锁定的 libs 包只带 `esp32p4/` | 保留 `platformio.ini` 里的 `board_build.chip_variant = esp32p4`（已设好，别删） |
 | `Directory specified in EXTRA_COMPONENT_DIRS doesn't exist`／平台装不上 | PlatformIO Core 太旧，或没用 `penv` 里的那个二进制 | 用 `~/.platformio/penv/bin/pio` |
 | 下载 `framework-arduinoespressif32-libs` 失败 | 固定的第三方库包地址不可达 | 检查 `platformio.ini` 里的 `platform_packages` 地址；这个包是社区在维护 |
 | 黑屏、不下雨，但能正常启动 | PSRAM 没跑在 200MHz（预编译库需要） | 别动 `build_flags` 里的 `-I src` 和 `src/sdkconfig.h`——它用 `#include_next` 覆盖了 `CONFIG_SPIRAM_SPEED` |

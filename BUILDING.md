@@ -215,6 +215,7 @@ Two more guards exist for the display path, and they are not decoration:
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | Build fails with bizarre compiler errors, missing `libgcc`, unknown `-m*` flags | the auto-detected toolchain is not a GCC 14.x (check the `Toolchain path overridden:` line) | install ESP-IDF 5.5.x `riscv32-esp-elf` (§1) |
+| `*** missing SConscript .../framework-arduinoespressif32-libs/esp32p4_es/pioarduino-build.py` | the platform's board definition sets `chip_variant = esp32p4_es` (ES silicon), but the pinned libs package only ships `esp32p4/` | keep `board_build.chip_variant = esp32p4` in `platformio.ini` (it is set — do not remove it) |
 | `Directory specified in EXTRA_COMPONENT_DIRS doesn't exist` / platform will not install | PlatformIO Core too old, or you are not using the `penv` binary | use `~/.platformio/penv/bin/pio` |
 | Build fails downloading `framework-arduinoespressif32-libs` | the pinned third-party lib bundle URL is unreachable | check the `platform_packages` URLs in `platformio.ini`; that project is community-maintained |
 | Black screen, no rain, boots fine otherwise | PSRAM not running at 200 MHz (the prebuilt libs need it) | keep `-I src` in `build_flags` and `src/sdkconfig.h` untouched — it overrides `CONFIG_SPIRAM_SPEED` via `#include_next` |
