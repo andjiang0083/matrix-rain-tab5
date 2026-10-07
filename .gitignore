@@ -19,6 +19,11 @@ sdkconfig
 *.zip
 .release/
 
+# --- releases/ : the M5Burner cover PNG is SOURCE, not output — publish.yaml
+# references it by path, so a fresh clone needs it. The .bin copies BUILDING.md
+# tells you to stage there are picked up by the *.bin rule above. ---
+releases/*.bin
+
 # --- logs ---
 logs/
 *.log
