@@ -44,7 +44,7 @@ Use the issue form and include:
 - Conventional-commit prefixes (`feat:`, `fix:`, `docs:`, `perf:`, `refactor:`, `chore:`) are appreciated.
 - English or 中文 are both fine — use whichever expresses the change more precisely.
 - Explain *why* in the body, especially for anything touching the drawing path, timing, or PSRAM traffic.
-- The version lives in **one place**: the `VERSION` file at the repo root. Every build generates `src/version_gen.h` from it (banner and About screen included), so bumping means editing `VERSION`, nothing else — and [CHANGELOG.md](CHANGELOG.md) still records the release by hand.
+- The **firmware** version lives in **one place**: the `VERSION` file at the repo root. Every build generates `src/version_gen.h` from it (boot banner and About screen included), so bumping the compiled-in version means editing `VERSION` — nothing else. Release metadata that is *not* compiled in is still maintained by hand: [CHANGELOG.md](CHANGELOG.md), `m5burner/matrix-rain.json` and `publish.yaml` ([tools/make_release.sh](tools/make_release.sh) reads those, it does not rewrite them).
 
 ## Code style
 

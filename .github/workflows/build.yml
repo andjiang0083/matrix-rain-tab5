@@ -22,16 +22,21 @@ jobs:
           pio --version
 
       # The runner has no ~/.espressif. Install the same GCC 14.x release
-      # BUILDING.md §1 prescribes; the tarball layout matches what
-      # src/override_toolchain.py auto-detects, so CI runs the same code path
-      # a contributor's machine does.
+      # BUILDING.md §1 prescribes, into a VERSION-NAMED directory
+      # (~/.espressif/tools/riscv32-esp-elf/esp-14.2.0_20260121/…) — that is the
+      # layout an ESP-IDF install produces and the one src/override_toolchain.py's
+      # "prefer 14.x" check matches. Extracting straight into the parent dir
+      # yields ".../riscv32-esp-elf/" (no version in the name), which silently
+      # drops CI into the toolchain script's fallback branch — the primary path
+      # would never be exercised here.
       - name: Install riscv32-esp-elf toolchain (GCC 14.x)
         run: |
           TOOLCHAIN=esp-14.2.0_20260121
           URL=https://github.com/espressif/crosstool-NG/releases/download/${TOOLCHAIN}/riscv32-esp-elf-14.2.0_20260121-x86_64-linux-gnu.tar.xz
-          mkdir -p ~/.espressif/tools/riscv32-esp-elf
-          curl -fsSL --retry 3 "$URL" | tar -xJ -C ~/.espressif/tools/riscv32-esp-elf
-          ~/.espressif/tools/riscv32-esp-elf/${TOOLCHAIN}/riscv32-esp-elf/bin/riscv32-esp-elf-g++ --version | head -1
+          DEST="$HOME/.espressif/tools/riscv32-esp-elf/${TOOLCHAIN}"
+          mkdir -p "$DEST"
+          curl -fsSL --retry 3 "$URL" | tar -xJ -C "$DEST"
+          "$DEST/riscv32-esp-elf/bin/riscv32-esp-elf-g++" --version | head -1
 
       # Cache PlatformIO packages between runs (first run downloads ~1.5 GB).
       - name: Cache PlatformIO packages
@@ -49,17 +54,26 @@ jobs:
           rm -rf .pio
           pio run -e tab5
 
-      # The same pre-flight the project runs before every release:
-      # merged image, valid magic bytes, DIO flash mode (M5Burner requires it).
+      # The same pre-flight the project runs before every release
+      # (tools/make_release.sh) — with the same ASSERTIONS, not warnings:
+      # merged image, magic bytes at each offset, size sanity, DIO flash mode.
+      # A regression has to fail here: M5Burner writes the file it is given at
+      # offset 0x0, so a wrong flash mode or a mis-merged image flashes fine
+      # over USB and then bricks the bootloader.
       - name: Verify merged image
         run: |
           python3 - <<'PY'
-          d = open('.pio/build/tab5/firmware.factory.bin', 'rb').read()
+          p = '.pio/build/tab5/firmware.factory.bin'
+          d = open(p, 'rb').read()
+          assert len(d) >= 0x10001, "image is %d bytes — truncated, not a merged image" % len(d)
           assert d[0x2000] == 0xE9, "no bootloader image at 0x2000 — wrong merge offsets"
           assert d[0x8000:0x8002] == b'\xaa\x50', "no partition table at 0x8000"
-          mode = d[0x2002] & 0xF
-          print(f"{len(d)} bytes, bootloader flash_mode = 0x{mode:02x}",
-                "(DIO OK)" if mode == 0x02 else "(WARN: not DIO)")
+          assert d[0x10000] == 0xE9, "no application image at 0x10000"
+          assert len(d) < 2 * 1024 * 1024, "image is %d bytes — padded to the whole flash?" % len(d)
+          mode = d[0x2002]
+          print("%d bytes, bootloader flash_mode = 0x%02x" % (len(d), mode),
+                "(DIO OK)" if mode == 0x02 else "(NOT DIO)")
+          assert mode == 0x02, "flash mode is not DIO — M5Burner writes at 0x0 and would brick the bootloader"
           PY
 
       - name: Attach firmware artifacts

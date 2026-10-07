@@ -45,7 +45,7 @@
 - 推荐用约定式前缀（`feat:`、`fix:`、`docs:`、`perf:`、`refactor:`、`chore:`）。
 - **中文或英文都可以**，用哪个能把改动说清楚就用哪个。
 - 正文里解释**为什么**，尤其是涉及绘制通路、时序、PSRAM 流量的改动。
-- 版本号只有**一个真源**：仓库根目录的 `VERSION` 文件。每次构建都会由它生成 `src/version_gen.h`（横幅和 About 界面都从这来），所以升版本只改 `VERSION`，别处不用动——[CHANGELOG.md](CHANGELOG.md) 仍由人手工记录发布。
+- **固件**版本号只有一个真源：仓库根目录的 `VERSION` 文件。每次构建都会由它生成 `src/version_gen.h`（开机横幅和 About 界面都从这来），所以**编译进固件的**版本只改 `VERSION`，别处不用动。编译不进去的发布元数据仍需人工维护：[CHANGELOG.md](CHANGELOG.md)、`m5burner/matrix-rain.json`、`publish.yaml`（[tools/make_release.sh](tools/make_release.sh) 只读取它们，不会改写）。
 
 ## 代码风格
 
