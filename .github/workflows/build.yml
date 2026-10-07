@@ -1,0 +1,72 @@
+name: build
+
+# Compile-only check — no hardware, no secrets, safe for fork PRs.
+# Proves every push/PR builds from a clean tree (the project's own rule,
+# CONTRIBUTING.md) and attaches the merged image so reviewers can inspect it.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PlatformIO Core
+        run: |
+          python3 -m pip install --quiet -U platformio
+          pio --version
+
+      # The runner has no ~/.espressif. Install the same GCC 14.x release
+      # BUILDING.md §1 prescribes; the tarball layout matches what
+      # src/override_toolchain.py auto-detects, so CI runs the same code path
+      # a contributor's machine does.
+      - name: Install riscv32-esp-elf toolchain (GCC 14.x)
+        run: |
+          TOOLCHAIN=esp-14.2.0_20260121
+          URL=https://github.com/espressif/crosstool-NG/releases/download/${TOOLCHAIN}/riscv32-esp-elf-14.2.0_20260121-x86_64-linux-gnu.tar.xz
+          mkdir -p ~/.espressif/tools/riscv32-esp-elf
+          curl -fsSL --retry 3 "$URL" | tar -xJ -C ~/.espressif/tools/riscv32-esp-elf
+          ~/.espressif/tools/riscv32-esp-elf/${TOOLCHAIN}/riscv32-esp-elf/bin/riscv32-esp-elf-g++ --version | head -1
+
+      # Cache PlatformIO packages between runs (first run downloads ~1.5 GB).
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/.cache
+            ~/.platformio/platforms
+            ~/.platformio/packages
+          key: pio-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-
+
+      - name: Build (clean tree)
+        run: |
+          rm -rf .pio
+          pio run -e tab5
+
+      # The same pre-flight the project runs before every release:
+      # merged image, valid magic bytes, DIO flash mode (M5Burner requires it).
+      - name: Verify merged image
+        run: |
+          python3 - <<'PY'
+          d = open('.pio/build/tab5/firmware.factory.bin', 'rb').read()
+          assert d[0x2000] == 0xE9, "no bootloader image at 0x2000 — wrong merge offsets"
+          assert d[0x8000:0x8002] == b'\xaa\x50', "no partition table at 0x8000"
+          mode = d[0x2002] & 0xF
+          print(f"{len(d)} bytes, bootloader flash_mode = 0x{mode:02x}",
+                "(DIO OK)" if mode == 0x02 else "(WARN: not DIO)")
+          PY
+
+      - name: Attach firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: matrix-rain-tab5-firmware-${{ github.sha }}
+          path: |
+            .pio/build/tab5/firmware.factory.bin
+            .pio/build/tab5/firmware.bin
+          if-no-files-found: error
