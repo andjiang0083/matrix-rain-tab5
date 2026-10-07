@@ -184,6 +184,7 @@ matrix-rain-tab5/
 │   ├── katakana_font.h     Generated bitmap font (91 glyphs)
 │   ├── sdkconfig.h         PSRAM 200 MHz override for the prebuilt Arduino libs
 │   ├── override_toolchain.py   Auto-detects the IDF RISC-V toolchain (no editing needed)
+│   ├── version.py              Generates version_gen.h from VERSION (build time)
 │   └── setup_menu.h        Setup-menu entry point
 ├── tools/fontgen.py        Regenerates katakana_font.h
 ├── tools/ui_mirror.py      PC re-render of shipped screens (parsed from src/)

@@ -182,6 +182,7 @@ matrix-rain-tab5/
 │   ├── katakana_font.h     生成的位图字库（91 字形）
 │   ├── sdkconfig.h         给预编译 Arduino 库用的 PSRAM 200MHz 覆盖
 │   ├── override_toolchain.py   自动探测 IDF 的 RISC-V 工具链（无需修改）
+│   ├── version.py              构建时从 VERSION 生成 version_gen.h
 │   └── setup_menu.h        设置菜单入口
 ├── tools/fontgen.py        重新生成 katakana_font.h
 ├── tools/ui_mirror.py      PC 重渲染已发布界面（从 src/ 解析，不漂移）

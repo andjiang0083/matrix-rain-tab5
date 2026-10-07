@@ -15,8 +15,15 @@
 #include <esp_wifi.h>
 #include <esp_task_wdt.h>
 
-// One place to bump the version: banner, About page, SET menu.
-static const char* APP_VERSION = "v1.3.4";
+// Version comes from the VERSION file at the repo root: src/version.py runs
+// on every build and generates version_gen.h from it. Banner and About page
+// alike — they can no longer disagree with VERSION, or drift from each other.
+#include "version_gen.h"  // generated at build time; gitignored
+
+#ifndef MATRIX_VERSION
+#error "MATRIX_VERSION missing: src/version.py did not run (extra_scripts). Restore VERSION / check the build log for 'Version from VERSION file'."
+#endif
+static const char* APP_VERSION = MATRIX_VERSION;
 
 // ── Sprite (only used for screenshots) ──
 static LGFX_Sprite canvas(&M5.Display);

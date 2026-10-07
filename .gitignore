@@ -2,6 +2,9 @@
 .pio/
 build/
 
+# --- generated at build time by src/version.py (truth: VERSION) ---
+src/version_gen.h
+
 # --- Local UI render dumps (tools/ui_mock.py, tools/ui_proposal.py) ---
 .uimock/
 debug/

@@ -44,7 +44,7 @@ Use the issue form and include:
 - Conventional-commit prefixes (`feat:`, `fix:`, `docs:`, `perf:`, `refactor:`, `chore:`) are appreciated.
 - English or 中文 are both fine — use whichever expresses the change more precisely.
 - Explain *why* in the body, especially for anything touching the drawing path, timing, or PSRAM traffic.
-- Keep the version in `src/main.cpp` (the boot banner), the About screen and [CHANGELOG.md](CHANGELOG.md) in sync.
+- The version lives in **one place**: the `VERSION` file at the repo root. Every build generates `src/version_gen.h` from it (banner and About screen included), so bumping means editing `VERSION`, nothing else — and [CHANGELOG.md](CHANGELOG.md) still records the release by hand.
 
 ## Code style
 
