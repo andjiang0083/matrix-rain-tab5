@@ -40,9 +40,9 @@ The 30 fps cap is a **deliberate ceiling**, not a measured limit: we capped it b
 
 ## 6. Build, packaging and CI
 
-- [ ] **GitHub Actions build check** using the pioarduino platform with a pinned toolchain — prove every PR compiles from a clean tree, and attach the merged image as an artifact.
+- [x] **GitHub Actions build check** using the pioarduino platform with a pinned toolchain — prove every PR compiles from a clean tree, and attach the merged image as an artifact. (`.github/workflows/build.yml`)
 - [x] **Auto-detect the RISC-V toolchain** in `src/override_toolchain.py` instead of the hard-coded `esp-14.2.0_20260121` path (this is the single most common build failure for newcomers). It now prefers the newest installed GCC 14.x, warns on a non-14.x fallback, and fails with install instructions when nothing is found.
-- [ ] **`tools/snap.py`** — a serial capture helper that handles the firmware's 921600 baud switch and writes a BMP; then wire it into the docs so contributors can attach screenshots to PRs.
+- [x] **`tools/snap.py`** — a serial capture helper that handles the firmware's 921600 baud switch and writes a BMP; then wire it into the docs so contributors can attach screenshots to PRs. Documented in BUILDING.md §5 (EN/CN).
 - [ ] **Tagged releases** that attach the merged `.bin`, the M5Burner `.zip` and a `sha256sums.txt`.
 
 ## 7. Docs

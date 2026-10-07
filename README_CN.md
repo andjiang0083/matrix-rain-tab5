@@ -186,6 +186,7 @@ matrix-rain-tab5/
 ├── tools/fontgen.py        重新生成 katakana_font.h
 ├── tools/ui_mirror.py      PC 重渲染已发布界面（从 src/ 解析，不漂移）
 ├── tools/ui_mock.py        UI 改动提案的评审画板
+├── tools/snap.py          串口截图抓取（自动处理 921600 波特率切换）
 ├── m5burner/               M5Burner 打包元数据
 └── docs/PORTING-NOTES.md   移植笔记：硬件发现、DSI/PSRAM 事后分析、走过的死路
 ```

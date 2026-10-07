@@ -188,6 +188,7 @@ matrix-rain-tab5/
 ├── tools/fontgen.py        Regenerates katakana_font.h
 ├── tools/ui_mirror.py      PC re-render of shipped screens (parsed from src/)
 ├── tools/ui_mock.py        Review harness for proposed UI changes
+├── tools/snap.py          Serial screenshot capture (handles the 921600 switch)
 ├── m5burner/               M5Burner packaging metadata
 └── docs/PORTING-NOTES.md   The port: hardware findings, DSI/PSRAM postmortem, dead ends
 ```

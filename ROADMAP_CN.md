@@ -40,9 +40,9 @@
 
 ## 6. 构建、打包与 CI
 
-- [ ] **GitHub Actions 构建检查** —— 用固定工具链跑 pioarduino 平台，证明每个 PR 都能在干净树里编过，并把合并镜像作为 artifact 附上。
+- [x] **GitHub Actions 构建检查** —— 用固定工具链跑 pioarduino 平台，证明每个 PR 都能在干净树里编过，并把合并镜像作为 artifact 附上。（`.github/workflows/build.yml`）
 - [x] **`src/override_toolchain.py` 自动探测 RISC-V 工具链**，取代硬编码的 `esp-14.2.0_20260121` 路径（这是新人最容易撞的构建失败）。现在优先选已安装的最新 GCC 14.x，回退到非 14.x 时会警告，什么都没装时报错并给出安装指引。
-- [ ] **`tools/snap.py`** —— 串口截图辅助脚本，处理好固件那段 921600 波特率切换并写出 BMP；然后接进文档，让贡献者能给 PR 附截图。
+- [x] **`tools/snap.py`** —— 串口截图辅助脚本，处理好固件那段 921600 波特率切换并写出 BMP；已接进文档（BUILDING_CN.md §5），贡献者能给 PR 附截图了。
 - [ ] **打 tag 的发布流程**：附上合并 `.bin`、M5Burner `.zip` 和 `sha256sums.txt`。
 
 ## 7. 文档

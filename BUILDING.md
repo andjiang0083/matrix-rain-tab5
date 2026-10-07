@@ -114,11 +114,19 @@ As a rule for this project: **verify visually, not through a debug loop.** One v
 
 The panel cannot be read back (the ST7123 has no reliable pixel-read path), so the firmware re-renders a frame into a PSRAM sprite on request:
 
-1. open the monitor, press `S`;
-2. the firmware prints `BMP:<bytes>` then streams a 24-bit BMP at 921600 baud, then `\nEND\n`;
-3. the tool switches back to 115200.
+1. open the monitor (115200), press `S`;
+2. the firmware prints `SNAP...`, renders, switches to 921600 and waits ~30 ms;
+3. it prints `BMP:<bytes>`, streams a 24-bit BMP, then `\nEND\n`;
+4. it switches back to 115200.
 
-The host side has to survive a baud-rate change (the device switches before the host does — start the capture at 115200 and let it fail, or listen at 921600 from the beginning and accept that the banner was garbled). A small helper script that does this correctly is on the roadmap.
+The host side has to survive a baud-rate change. `tools/snap.py` does it correctly — consume the device's `SNAP...` line at 115200, switch to 921600 during the silent render window, capture by byte count until `END`:
+
+```bash
+python3 tools/snap.py                     # auto-detects the port, writes matrix-rain-<timestamp>.bmp
+python3 tools/snap.py /dev/cu.usbmodem1101 -o snap.bmp
+```
+
+Keep the session short (§4): grab one frame, unplug.
 
 ---
 
