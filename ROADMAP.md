@@ -42,7 +42,7 @@ The first-boot path is the rough edge: a non-ASCII SSID renders as `□`, the ti
 
 ## 7. Docs
 
-**Shipped:** the first real-device photo in the README. A short capture of the screen in motion is still wanted — nothing sells a clock like seeing it run.
+**Shipped:** a real-device photo in the README — a straightened, screen-only 16:9 crop of the flashed build. A short capture of the screen in motion is still wanted — nothing sells a clock like seeing it run.
 
 **Open items →** [`area/docs`](https://github.com/andjiang0083/matrix-rain-tab5/issues?q=is%3Aissue+is%3Aopen+label%3Aarea%2Fdocs)
 
