@@ -90,8 +90,8 @@ Release 里的 `.bin` 是**合并镜像**（bootloader @ `0x2000` + 分区表 + 
 ```bash
 git clone https://github.com/andjiang0083/matrix-rain-tab5.git
 cd matrix-rain-tab5
-~/.platformio/penv/bin/pio run                                   # 构建
-~/.platformio/penv/bin/pio run --target upload \
+~/.platformio/penv/bin/pio run -e tab5                         # 构建
+~/.platformio/penv/bin/pio run -e tab5 --target upload \
   --upload-port /dev/cu.usbmodemXXXX                             # 刷机
 ```
 
@@ -184,6 +184,8 @@ matrix-rain-tab5/
 │   ├── override_toolchain.py   自动探测 IDF 的 RISC-V 工具链（无需修改）
 │   └── setup_menu.h        设置菜单入口
 ├── tools/fontgen.py        重新生成 katakana_font.h
+├── tools/ui_mirror.py      PC 重渲染已发布界面（从 src/ 解析，不漂移）
+├── tools/ui_mock.py        UI 改动提案的评审画板
 ├── m5burner/               M5Burner 打包元数据
 └── docs/PORTING-NOTES.md   移植笔记：硬件发现、DSI/PSRAM 事后分析、走过的死路
 ```
@@ -193,6 +195,8 @@ matrix-rain-tab5/
 ## 参与共建
 
 欢迎开 issue 和 PR——项目约定见 [CONTRIBUTING.md](CONTRIBUTING.md)（[中文](CONTRIBUTING_CN.md)）（这些约定来自真实故障，不是口味），可上手的具体事项见 [ROADMAP.md](ROADMAP.md)（[中文](ROADMAP_CN.md)）。报 bug 时，最能省时间的两条信息是：**开机横幅那一行**，以及**屏幕是自己恢复的还是必须断电**。
+
+**没有 Tab5 也能参与 UI 共建。** `tools/ui_mirror.py` 直接把几何、字体、颜色从 `src/*.h` / `*.cpp` 里解析出来渲染已发布的设置界面——没有任何手抄坐标，预览不可能和面板实际画出来的漂移（`python3 tools/ui_mirror.py` → PNG 输出到 `.uimock/new/`；`--check` 跑数值自检）。`tools/ui_mock.py` 是改动提案的评审画板。把这些 PNG 附进你的 PR：v1.3.4 键盘修复就是这么评审的——先在 PC 上看过效果，每次刷机只带一个你已经确定是对的改动。
 
 ## 致谢与许可
 

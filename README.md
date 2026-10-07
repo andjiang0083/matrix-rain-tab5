@@ -92,8 +92,8 @@ The `.bin` in the release is a *merged* image (bootloader @ `0x2000` + partition
 ```bash
 git clone https://github.com/andjiang0083/matrix-rain-tab5.git
 cd matrix-rain-tab5
-~/.platformio/penv/bin/pio run                                   # build
-~/.platformio/penv/bin/pio run --target upload \
+~/.platformio/penv/bin/pio run -e tab5                         # build
+~/.platformio/penv/bin/pio run -e tab5 --target upload \
   --upload-port /dev/cu.usbmodemXXXX                             # flash
 ```
 
@@ -186,6 +186,8 @@ matrix-rain-tab5/
 │   ├── override_toolchain.py   Auto-detects the IDF RISC-V toolchain (no editing needed)
 │   └── setup_menu.h        Setup-menu entry point
 ├── tools/fontgen.py        Regenerates katakana_font.h
+├── tools/ui_mirror.py      PC re-render of shipped screens (parsed from src/)
+├── tools/ui_mock.py        Review harness for proposed UI changes
 ├── m5burner/               M5Burner packaging metadata
 └── docs/PORTING-NOTES.md   The port: hardware findings, DSI/PSRAM postmortem, dead ends
 ```
@@ -195,6 +197,8 @@ matrix-rain-tab5/
 ## Contributing
 
 Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for the project's house rules (they come from real failures, not taste) and [ROADMAP.md](ROADMAP.md) for concrete, sized-up work. If you are going to report a bug, the two facts that save the most time are **the boot banner line** and **whether the screen came back by itself or needed a power cycle**.
+
+**No Tab5? You can still contribute UI work.** `tools/ui_mirror.py` renders the shipped settings screens by parsing geometry, fonts and colours straight out of `src/*.h` / `*.cpp` — nothing hand-typed, so the preview cannot drift from what the panel will draw (`python3 tools/ui_mirror.py` → PNGs in `.uimock/new/`; `--check` runs a numeric self-test). `tools/ui_mock.py` is the review harness for proposed changes. Attach these PNGs to your PR: this is exactly how the v1.3.4 keyboard fix was reviewed, and it fits the house rule — review visually on your PC first, so each flash carries one change that you already know is right.
 
 ## Credits and licence
 

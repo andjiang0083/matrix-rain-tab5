@@ -22,7 +22,7 @@ Thanks for considering it. This is a single-board project maintained by someone 
 ## Building and testing
 
 See [BUILDING.md](BUILDING.md). Before you open a PR:
-
+- [ ] UI changes were reviewed on your PC first: `python3 tools/ui_mirror.py` renders the shipped screens from the firmware's own constants — attach the PNGs to the PR (no hardware required).
 - [ ] It builds **from a clean tree** (`rm -rf .pio && pio run`), not just incrementally.
 - [ ] The device boots, the clock renders, and `FPS:` sits at ~30.
 - [ ] The rain does not leave residue: watch at least one full column-reset cycle (about a minute) and check that swept bands were cleared.
