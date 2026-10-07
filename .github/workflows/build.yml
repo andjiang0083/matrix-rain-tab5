@@ -76,6 +76,15 @@ jobs:
           assert mode == 0x02, "flash mode is not DIO — M5Burner writes at 0x0 and would brick the bootloader"
           PY
 
+      # The no-hardware review path README/CONTRIBUTING advertise: render the
+      # shipped screens from the firmware's own constants and check the geometry
+      # numerically (out-of-panel boxes, overlapping text). It reads M5GFX's font
+      # header out of .pio/libdeps, which is why it has to run after the build.
+      - name: UI mirror check (no hardware required)
+        run: |
+          python3 -m pip install --quiet pillow
+          python3 tools/ui_mirror.py --check
+
       - name: Attach firmware artifacts
         uses: actions/upload-artifact@v4
         with:

@@ -23,7 +23,7 @@
 
 见 [BUILDING_CN.md](BUILDING_CN.md)。开 PR 之前：
 
-- [ ] UI 改动先在 PC 上评审过：`python3 tools/ui_mirror.py` 用固件自己的常量渲染已发布界面——把 PNG 附进 PR（不需要硬件）。
+- [ ] UI 改动先在 PC 上评审过：`python3 tools/ui_mirror.py` 用固件自己的常量渲染已发布界面——把 PNG 附进 PR。不需要硬件，但它要读 `.pio/libdeps` 里 M5GFX 的字体头，所以先构建一次；CI 会在每个 PR 上跑 `--check`。
 - [ ] 在**干净树**里能编过（`rm -rf .pio && pio run`），不只是增量。
 - [ ] 设备能启动、时钟能渲染、`FPS:` 稳定在 30 左右。
 - [ ] 雨不留残影：至少观察一个完整的列复位周期（约一分钟），确认清扫过的竖条被清干净了。

@@ -198,7 +198,7 @@ matrix-rain-tab5/
 
 欢迎开 issue 和 PR——项目约定见 [CONTRIBUTING.md](CONTRIBUTING.md)（[中文](CONTRIBUTING_CN.md)）（这些约定来自真实故障，不是口味），可上手的具体事项见 [ROADMAP.md](ROADMAP.md)（[中文](ROADMAP_CN.md)）。报 bug 时，最能省时间的两条信息是：**开机横幅那一行**，以及**屏幕是自己恢复的还是必须断电**。
 
-**没有 Tab5 也能参与 UI 共建。** `tools/ui_mirror.py` 直接把几何、字体、颜色从 `src/*.h` / `*.cpp` 里解析出来渲染已发布的设置界面——没有任何手抄坐标，预览不可能和面板实际画出来的漂移（`python3 tools/ui_mirror.py` → PNG 输出到 `.uimock/new/`；`--check` 跑数值自检）。`tools/ui_mock.py` 是改动提案的评审画板。把这些 PNG 附进你的 PR：v1.3.4 键盘修复就是这么评审的——先在 PC 上看过效果，每次刷机只带一个你已经确定是对的改动。
+**没有 Tab5 也能参与 UI 共建。** `tools/ui_mirror.py` 直接把几何、字体、颜色从 `src/*.h` / `*.cpp` 里解析出来渲染已发布的设置界面——没有任何手抄坐标，预览不可能和面板实际画出来的漂移（`python3 tools/ui_mirror.py` → PNG 输出到 `.uimock/new/`；`--check` 跑数值自检，且**CI 会在每个 PR 上跑它**）。它要读 `.pio/libdeps` 里 M5GFX 的字体头，所以首次运行前先构建一次（`pio run -e tab5`）。`tools/ui_mock.py` 是改动提案的评审画板。把这些 PNG 附进你的 PR：v1.3.4 键盘修复就是这么评审的——先在 PC 上看过效果，每次刷机只带一个你已经确定是对的改动。
 
 ## 致谢与许可
 
