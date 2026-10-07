@@ -12,3 +12,4 @@ platform_entries:
     m5burner_firmware_id: "1897200000000000841"
     m5burner_version_id: "2106681088593502209"   # v1.3.4, PENDING 审核（v1.3.2 已 PUBLISHED）
     github_release: "https://github.com/andjiang0083/matrix-rain-tab5/releases/tag/v1.3.4"
+    readback: 2026-10-06 PUBLISHED vid=2106681088593502209
