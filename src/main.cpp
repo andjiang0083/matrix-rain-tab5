@@ -459,8 +459,12 @@ static void doSerialSnap() {
   int rowSize24 = (w * 3 + 3) & ~3;
   int fileSize24 = 54 + rowSize24 * h;
 
+  // Reconfigure, do NOT re-init: setup() has already initialised the TWDT, and a
+  // second esp_task_wdt_init() fails with ESP_ERR_INVALID_STATE — it prints an
+  // error line onto the very wire this function is streaming a BMP over, and the
+  // longer timeout never actually takes effect.
   esp_task_wdt_config_t wdt_cfg = { .timeout_ms = 180000, .trigger_panic = false };
-  esp_task_wdt_init(&wdt_cfg);
+  esp_task_wdt_reconfigure(&wdt_cfg);
 
   Serial.flush();
   Serial.begin(921600);
@@ -502,7 +506,7 @@ static void doSerialSnap() {
   Serial.begin(115200);
   delay(30);
   esp_task_wdt_config_t wdt_norm = { .timeout_ms = 5000, .trigger_panic = false };
-  esp_task_wdt_init(&wdt_norm);
+  esp_task_wdt_reconfigure(&wdt_norm);   // same reason as above: reconfigure, not re-init
 }
 
 // ────────────────────────────────────────────────────────────
