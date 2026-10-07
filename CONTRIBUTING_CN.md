@@ -6,7 +6,7 @@
 
 ## 可以帮什么
 
-- **从 [ROADMAP.md](ROADMAP.md) 里挑一项**，先在 issue 下留言（或开一个）说明你在做，避免撞车。
+- **从 [issue tracker](https://github.com/andjiang0083/matrix-rain-tab5/issues) 里挑一个开放项**（按 `area/*` 分组；每个方向为什么值得做见 [ROADMAP_CN.md](ROADMAP_CN.md)），先在 issue 下留言说明你在做，避免撞车。
 - **修 bug** —— 请带上下面说的证据。
 - **改进文档** —— Windows 构建走查、实机截图、翻译。
 - **把本版本没用的硬件用起来** —— ES8388 音频、BMI270 IMU、INA226 电量计、RX8130CE 中断线，硬件都在，这里一个都没接。

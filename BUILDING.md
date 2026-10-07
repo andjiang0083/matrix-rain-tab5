@@ -119,7 +119,7 @@ The panel cannot be read back (the ST7123 has no reliable pixel-read path), so t
 3. it prints `BMP:<bytes>`, streams a 24-bit BMP, then `\nEND\n`;
 4. it switches back to 115200.
 
-The host side has to survive a baud-rate change. `tools/snap.py` does it correctly — consume the device's `SNAP...` line at 115200, switch to 921600 during the silent render window, capture by byte count until `END`:
+The host side has to survive a baud-rate change — and note that this capture path is **not finished work**: on a real device the pixel stream currently stalls part-way (tracked under `area/build` in the issue tracker; treat `tools/snap.py` as a starting point, not a working screenshot path). What the host has to do, and what `snap.py` implements: consume the device's `SNAP...` line at 115200, switch to 921600 during the silent render window, skip any device log line that lands before the header (the firmware can emit one there), then capture by byte count until `END`:
 
 ```bash
 python3 tools/snap.py                     # auto-detects the port, writes matrix-rain-<timestamp>.bmp

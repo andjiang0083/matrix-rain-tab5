@@ -6,7 +6,7 @@ Thanks for considering it. This is a single-board project maintained by someone 
 
 ## Ways to help
 
-- **Pick something from [ROADMAP.md](ROADMAP.md)** and comment on the issue (or open one) saying you are taking it, so nobody duplicates work.
+- **Pick an open issue from the [tracker](https://github.com/andjiang0083/matrix-rain-tab5/issues)** — grouped by `area/*`, and [ROADMAP.md](ROADMAP.md) explains the why behind each area — and comment on it saying you are taking it, so nobody duplicates work.
 - **Fix a bug** — with the evidence described below.
 - **Improve the docs** — a build walkthrough for Windows, screenshots, translations.
 - **Use the hardware this build ignores** — the ES8388 audio codec, the BMI270 IMU, the INA226 battery monitor, the RX8130CE interrupt line. All present, all unwired here.
