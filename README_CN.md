@@ -181,7 +181,7 @@ matrix-rain-tab5/
 │   ├── matrix_gui.h        绿底黑字配色 + SSID 清洗
 │   ├── katakana_font.h     生成的位图字库（91 字形）
 │   ├── sdkconfig.h         给预编译 Arduino 库用的 PSRAM 200MHz 覆盖
-│   ├── override_toolchain.py   把 IDF 的 RISC-V 工具链放进 PATH（**你需要改这里**）
+│   ├── override_toolchain.py   自动探测 IDF 的 RISC-V 工具链（无需修改）
 │   └── setup_menu.h        设置菜单入口
 ├── tools/fontgen.py        重新生成 katakana_font.h
 ├── m5burner/               M5Burner 打包元数据

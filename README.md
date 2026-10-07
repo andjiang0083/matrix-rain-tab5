@@ -183,7 +183,7 @@ matrix-rain-tab5/
 │   ├── matrix_gui.h        Green-on-black palette + SSID sanitiser
 │   ├── katakana_font.h     Generated bitmap font (91 glyphs)
 │   ├── sdkconfig.h         PSRAM 200 MHz override for the prebuilt Arduino libs
-│   ├── override_toolchain.py   Prepends the IDF RISC-V toolchain to PATH (edit me!)
+│   ├── override_toolchain.py   Auto-detects the IDF RISC-V toolchain (no editing needed)
 │   └── setup_menu.h        Setup-menu entry point
 ├── tools/fontgen.py        Regenerates katakana_font.h
 ├── m5burner/               M5Burner packaging metadata

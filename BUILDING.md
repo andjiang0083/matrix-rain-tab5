@@ -22,41 +22,25 @@ Installing the toolchain (if you already have ESP-IDF v5.5.x somewhere):
 ```bash
 # option A — you have an IDF checkout
 ~/esp/esp-idf-v5.5.3/install.sh
-# then point src/override_toolchain.py at ~/.espressif/tools/riscv32-esp-elf/<version>/riscv32-esp-elf/bin
+# the build auto-detects any installed 14.x riscv32-esp-elf under ~/.espressif/tools/
 
 # option B — just install the tools, no IDF
 python3 $IDF_PATH/tools/idf_tools.py install riscv32-esp-elf
 ```
 
-**Read step 2 before you build — you will almost certainly have to edit it.**
+**Step 2 explains what the build picks and why — worth a read, no editing needed.**
 
 ---
 
-## 2. The toolchain override (the pitfall that eats the most time)
+## 2. The toolchain override (auto-detected — you do not edit it)
 
-`src/override_toolchain.py` is wired into the build via `extra_scripts` and prepends a hard-coded path to `PATH`:
+`src/override_toolchain.py` is wired into the build via `extra_scripts`. It auto-detects your installed RISC-V toolchain: it scans `~/.espressif/tools/riscv32-esp-elf/*/riscv32-esp-elf/bin` and **prefers the newest GCC 14.x** — that is what the prebuilt Arduino libs (`idf-release_v5.5` bundle) were compiled with, and what supports the `xesppie` extension this SoC needs.
 
-```python
-idf_tc_path = os.path.expanduser(
-    "~/.espressif/tools/riscv32-esp-elf/esp-14.2.0_20260121/riscv32-esp-elf/bin"
-)
-env.PrependENVPath("PATH", idf_tc_path)
-print(f"Toolchain path overridden: {idf_tc_path}")
-```
+- If no 14.x is installed, it prints a `WARNING` and falls back to the newest version you have — that build may fail with compiler errors that look nothing like a PATH problem (unknown `-m` options, `cc1plus: error`, missing `libgcc`). Install an ESP-IDF 5.5.x toolchain instead (§1).
+- If nothing is installed at all, the build stops with an error that tells you exactly what to install.
+- The build always prints `Toolchain path overridden: <path>` — check that line if the compiler misbehaves.
 
-That version string (`esp-14.2.0_20260121`) is *the author's machine*. If your `ls ~/.espressif/tools/riscv32-esp-elf/` shows a different directory:
-
-- the build prints your missing path and then fails with compiler errors that look nothing like a PATH problem (unknown `-m` options, `cc1plus: error`, or a linker that cannot find `libgcc`);
-- fix it by editing that one line to match your installed version — or make it auto-detect:
-
-```python
-import glob, os
-cands = sorted(glob.glob(os.path.expanduser("~/.espressif/tools/riscv32-esp-elf/*/riscv32-esp-elf/bin")))
-assert cands, "no riscv32-esp-elf toolchain found — see BUILDING.md step 1"
-env.PrependENVPath("PATH", cands[-1])
-```
-
-A PR that replaces the hard-coded path with auto-detection would be very welcome.
+You no longer need to edit this file. (It used to hard-code `esp-14.2.0_20260121` — the author's machine — which was the single most common newcomer build failure.)
 
 ---
 
@@ -222,7 +206,7 @@ Two more guards exist for the display path, and they are not decoration:
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Build fails with bizarre compiler errors, missing `libgcc`, unknown `-m*` flags | `src/override_toolchain.py` points at a toolchain version you do not have | install ESP-IDF 5.5.x `riscv32-esp-elf`, or edit the path (§2) |
+| Build fails with bizarre compiler errors, missing `libgcc`, unknown `-m*` flags | the auto-detected toolchain is not a GCC 14.x (check the `Toolchain path overridden:` line) | install ESP-IDF 5.5.x `riscv32-esp-elf` (§1) |
 | `Directory specified in EXTRA_COMPONENT_DIRS doesn't exist` / platform will not install | PlatformIO Core too old, or you are not using the `penv` binary | use `~/.platformio/penv/bin/pio` |
 | Build fails downloading `framework-arduinoespressif32-libs` | the pinned third-party lib bundle URL is unreachable | check the `platform_packages` URLs in `platformio.ini`; that project is community-maintained |
 | Black screen, no rain, boots fine otherwise | PSRAM not running at 200 MHz (the prebuilt libs need it) | keep `-I src` in `build_flags` and `src/sdkconfig.h` untouched — it overrides `CONFIG_SPIRAM_SPEED` via `#include_next` |

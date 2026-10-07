@@ -22,41 +22,25 @@
 ```bash
 # 方案 A —— 你有 IDF 源码树
 ~/esp/esp-idf-v5.5.3/install.sh
-# 然后把 src/override_toolchain.py 指向 ~/.espressif/tools/riscv32-esp-elf/<版本>/riscv32-esp-elf/bin
+# 构建会自动探测 ~/.espressif/tools/ 下已安装的 14.x riscv32-esp-elf
 
 # 方案 B —— 只装工具，不要 IDF
 python3 $IDF_PATH/tools/idf_tools.py install riscv32-esp-elf
 ```
 
-**构建之前请先读第 2 节——你几乎一定要改它。**
+**第 2 节解释构建会选哪条工具链、为什么——值得读，但不用改。**
 
 ---
 
-## 2. 工具链覆盖（最耗时间的那个坑）
+## 2. 工具链覆盖（自动探测——你不用改）
 
-`src/override_toolchain.py` 通过 `extra_scripts` 挂在构建里，把一条**硬编码**路径塞进 `PATH`：
+`src/override_toolchain.py` 通过 `extra_scripts` 挂在构建里，自动探测你机器上装的工具链：扫描 `~/.espressif/tools/riscv32-esp-elf/*/riscv32-esp-elf/bin`，**优先选最新的 GCC 14.x**——预编译库（`idf-release_v5.5` 包）就是用它编的，这块 SoC 需要的 `xesppie` 扩展也只有 Espressif 定制版 GCC 支持。
 
-```python
-idf_tc_path = os.path.expanduser(
-    "~/.espressif/tools/riscv32-esp-elf/esp-14.2.0_20260121/riscv32-esp-elf/bin"
-)
-env.PrependENVPath("PATH", idf_tc_path)
-print(f"Toolchain path overridden: {idf_tc_path}")
-```
+- 没装 14.x 时会打印 `WARNING`，回退到你装的最新版本——这种构建可能以一堆**看起来跟 PATH 毫无关系**的编译错误失败（未知的 `-m` 选项、`cc1plus: error`、找不到 `libgcc`）。请改装 ESP-IDF 5.5.x 工具链（第 1 节）。
+- 什么都没装时，构建直接停下并报出该装什么。
+- 构建始终会打印 `Toolchain path overridden: <路径>`——编译器行为诡异时先看这行。
 
-那个版本号（`esp-14.2.0_20260121`）是**作者机器上的**版本。如果你 `ls ~/.espressif/tools/riscv32-esp-elf/` 出来的是别的目录：
-
-- 构建会先打印出那条不存在的路径，然后以一堆**看起来跟 PATH 毫无关系**的编译错误失败（未知的 `-m` 选项、`cc1plus: error`、链接器找不到 `libgcc`）；
-- 改这一行让它对上你安装的版本即可——或者干脆改成自动探测：
-
-```python
-import glob, os
-cands = sorted(glob.glob(os.path.expanduser("~/.espressif/tools/riscv32-esp-elf/*/riscv32-esp-elf/bin")))
-assert cands, "no riscv32-esp-elf toolchain found — see BUILDING.md step 1"
-env.PrependENVPath("PATH", cands[-1])
-```
-
-非常欢迎有人提 PR 把硬编码路径换成自动探测。
+你不再需要编辑这个文件。（它以前硬编码 `esp-14.2.0_20260121`——作者机器上的版本——那是新人构建失败的头号原因。）
 
 ---
 
@@ -204,7 +188,7 @@ PY
 
 | 现象 | 可能原因 | 处理 |
 |---|---|---|
-| 编译报诡异的错：找不到 `libgcc`、未知 `-m*` 选项 | `src/override_toolchain.py` 指向了你没装的工具链版本 | 装 ESP-IDF 5.5.x 的 `riscv32-esp-elf`，或改那条路径（第 2 节） |
+| 编译报诡异的错：找不到 `libgcc`、未知 `-m*` 选项 | 自动探测到的工具链不是 GCC 14.x（看构建日志的 `Toolchain path overridden:` 行） | 装 ESP-IDF 5.5.x 的 `riscv32-esp-elf`（第 1 节） |
 | `Directory specified in EXTRA_COMPONENT_DIRS doesn't exist`／平台装不上 | PlatformIO Core 太旧，或没用 `penv` 里的那个二进制 | 用 `~/.platformio/penv/bin/pio` |
 | 下载 `framework-arduinoespressif32-libs` 失败 | 固定的第三方库包地址不可达 | 检查 `platformio.ini` 里的 `platform_packages` 地址；这个包是社区在维护 |
 | 黑屏、不下雨，但能正常启动 | PSRAM 没跑在 200MHz（预编译库需要） | 别动 `build_flags` 里的 `-I src` 和 `src/sdkconfig.h`——它用 `#include_next` 覆盖了 `CONFIG_SPIRAM_SPEED` |
