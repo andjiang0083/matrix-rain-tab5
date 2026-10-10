@@ -208,6 +208,9 @@ PY
 | 画面跑几秒到几分钟后冻住，无 panic，必须断电 | PSRAM 总线争用（DSI + CPU 回写 + USB DMA） | 拔掉 USB；多数情况下 3 秒帧保护会自己重启回来——详见 [docs/PORTING-NOTES.md](docs/PORTING-NOTES.md) |
 | 随机复位，日志里 `Task watchdog got triggered` | 有阻塞界面没喂狗 | 在等待循环里加 `esp_task_wdt_reset()`（第 7 节） |
 | 打印 `TIMEOUT 3000ms` 然后重启 | 帧保护触发——某一帧超过 3 秒 | 通常还是总线争用那件事：检查是不是新加了全屏 sprite 或第二个帧缓冲写入者 |
+| **插着线**超过 2–10 分钟屏幕照样调暗/熄灭 | 闲置覆盖没生效：`设置 → About` 显示 `Power battery …` | 看开机那行 `[POWER] USB-C det: pin=… attached=…`——判"插线"要两条里任一条成立：充电芯片状态线（IO 扩展器 #2 的 P6）为高，**或** INA226 的入包电流显示"电包没在被放电"。靠电池跑时电流是明显负数；插着线则不管电包满不满都 ≈0（不装电池也是 ≈0）。代码见 `src/main.cpp` 的 `readUsbDetect()` |
+| **没插线**屏幕也从不调暗 | 被判成"插着线"了——状态线悬空为高，或电流判据误判（读到的电流没有明显负值） | 同上那行日志；下拉在 `initUsbDetect()` 里设，引脚/门槛/采样周期在 `src/config.h` 的 `USB_DET_*` |
+| 插着线但电包永远不充电（电量只降不升） | 充电从来没被使能：M5Unified 拉扩展器只读 chip ID，不写方向/输出寄存器，`CHG_EN`（扩展器 #2 的 P7）因此从没被驱动过 | v1.3.5 在 `M5.begin()` 之后调 `initCharging()`：先 QC（P5）、隔 50ms、再拉高 P7。看开机那行 `[POWER] charging: P7(CHG_EN)=1 P5(QC_EN)=0 out=0x89`——`out` 的 bit7 是 0 就说明没写进去（`digitalWrite()` 只写 OUT_SET，必须先设方向） |
 | 退出设置菜单时蓝屏并重启 | 1.3.1 之前的 sprite/发光缓冲残留状态 | v1.3.1 会在退出时清发光缓冲并重新同步时钟——升级 |
 | 退出菜单后屏幕有"残影"（旧菜单像素） | 同上 | 同上 |
 | 片假名集显示成空白格 | `katakana_font.h` 缺失或被截断了——它是生成物 | 跑 `python3 tools/fontgen.py > src/katakana_font.h`（需要 Pillow）；在装了该源字体的机器上，生成结果与仓库里的头文件**逐字节一致** |

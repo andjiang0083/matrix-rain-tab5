@@ -18,7 +18,7 @@ Four parts are on the board and unused by this build: the ES8388/ES7210 audio pa
 
 ## 3. Power
 
-"Idle" today only dims (2 min → 25 %), drops to 8 fps (3 min) and kills the backlight (10 min); the CPU never sleeps, so idle current is nothing like the hardware's potential. Numbers, not adjectives — and measuring them at all needs the INA226 (§2) to be readable first.
+"Idle" today only dims (2 min → 25 %), drops to 8 fps (3 min) and kills the backlight (10 min) — **unless a USB-C cable is attached, in which case the whole chain is suspended** (v1.3.5: the charger's status line through the IO expander *or* the pack not being drained, so a full pack — or no pack fitted at all — still counts as mains). The CPU never sleeps, so idle current is nothing like the hardware's potential. Numbers, not adjectives — and measuring them at all needs the INA226 (§2) to be readable first.
 
 **Open items →** [`area/power`](https://github.com/andjiang0083/matrix-rain-tab5/issues?q=is%3Aissue+is%3Aopen+label%3Aarea%2Fpower)
 

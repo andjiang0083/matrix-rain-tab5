@@ -221,11 +221,15 @@ def slider(d, x, y, w, h, pct):
     elif fw:   d.fillRect(x, y, fw, h, COL(MG['BTN_BDR']))
 
 # ═══════════════ the screens, as the firmware draws them ═══════════════
+# The version on the About screen is compiled in from the VERSION file, so the
+# mock reads the same file instead of carrying a number that goes stale.
+VER = 'v' + open(os.path.join(ROOT, 'VERSION')).read().strip()
+
 def s_menu(cur=1, bright=50):
     d = Screen(); d.fillScreen(0)
     bar(d, 'SETUP')
     items = [('WiFi Settings', None), ('Character Set', 'KATAKANA'),
-             ('Brightness', f'{bright}%'), ('About', 'v1.3.2'), ('Back to clock', None)]
+             ('Brightness', f'{bright}%'), ('About', VER), ('Back to clock', None)]
     for i, (label, value) in enumerate(items):
         card(d, i, len(items), label, value, selected=(i == cur))
     return d
@@ -248,12 +252,15 @@ def s_bright(bright=50):
     button(d, 920, 460, 160, 88, '+', 'SECONDARY', TS['T_CLOCK'])
     return d
 
-def s_about():
+def s_about(usb=True):
     d = Screen(); d.fillScreen(0)
     bar(d, 'About', 'SETUP 4/4'); back(d)
     left(d, TS['T_BIG'],   'Matrix Rain Clock', 80, 150, MG['TITLE'])
-    left(d, TS['T_BODY'],  'v1.3.2', 80, 200, MG['DIM'])
+    left(d, TS['T_BODY'],  VER, 80, 200, MG['DIM'])
     left(d, TS['T_BODY'],  'M5Stack Tab5  |  ESP32-P4', 80, 246, MG['BODY'])
+    left(d, TS['T_SMALL'], 'Power   USB-C (idle dimming off)' if usb
+                           else 'Power   battery (idle dimming on)', 80, 284,
+         MG['BODY'] if usb else MG['DIM'])
     left(d, TS['T_SMALL'], '"There is no spoon."', 80, 316, MG['DIM'])
     left(d, TS['T_SMALL'], 'github.com/andjiang0083/matrix-rain-tab5', 80, 348, MG['DIM'])
     return d
@@ -365,7 +372,9 @@ def s_sync():
     return d
 
 SCREENS = [('01_menu', s_menu), ('02_charset', s_charset), ('03_brightness', s_bright),
-           ('04_about', s_about), ('05_wifi_list', s_list), ('06_keyboard', s_keyboard),
+           ('04_about', s_about), ('04b_about_usb', lambda: s_about(True)),
+           ('04c_about_battery', lambda: s_about(False)),
+           ('05_wifi_list', s_list), ('06_keyboard', s_keyboard),
            ('07_connecting', s_connecting), ('08_timezone', s_tz), ('09_confirm', s_confirm),
            ('10_syncing', s_sync)]
 

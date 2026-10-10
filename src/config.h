@@ -19,6 +19,23 @@ static const int IDLE_POWERSAVE_MS  =  60000;   // 60s → 降频
 static const int IDLE_SLEEP_MS      = 180000;   // 180s → Light Sleep
 static const int SLEEP_POLL_US      = 200000;
 
+// ── USB-C 接入检测 (Tab5: 充电芯片的状态线挂在 IO 扩展器 #2 的 P6) ──
+// 用途：插着线时整条省电链路停摆（不降亮度/不灭屏），见 main.cpp 的 idle 状态机。
+// P6 是 charger 的输入脚、没有 VBUS 分压，所以它是"插线/在充"而不是"5V 存在"的证据；
+// 三个来源对它的叫法不一（BSP 叫 USB_C_DET、M5Unified 注释叫 CHG_STAT、ESPHome 板级
+// 定义叫 charging status），但一致认为它由充电芯片驱动 —— 真实极性靠开机那行日志定。
+static const int USB_DET_EXPANDER = 1;      // PI4IOE @0x44 (M5Unified 的索引)
+static const int USB_DET_PIN      = 6;      // IN_STA(0x0F) bit 6
+static const int USB_DET_POLL_MS  = 500;    // 采样周期（不是每帧）
+static const int USB_DET_SAMPLES  = 2;      // 连续 N 次同值才改状态（滤波）
+static const int USB_DET_DISCHARGE_MA = 40; // 电包放电超过这个值(mA)才认为"没市电"
+
+// ── 充电使能 (扩展器 #2 @0x44) ──
+// 厂商 BSP/demo 的口径：P7=CHG_EN(高=使能充电)、P5=QC_EN(低=使能快充)
+static const int CHG_IOEXPANDER = 1;
+static const int CHG_EN_PIN     = 7;
+static const int CHG_QC_PIN     = 5;
+
 // ── 矩阵雨 (列式, 160列 × 16字符) ──
 static const char MATRIX_CHARS[] = "01#*+:.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz<>/|~@%&$";
 

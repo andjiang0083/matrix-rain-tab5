@@ -38,7 +38,7 @@ Honest state, measured on real hardware (not aspirational):
 | NTP boot sync + hardware RTC | ✅ Working | Blocking sync at boot, UTC written to the RX8130CE; RTC re-read every 60 s |
 | Brightness | ✅ Working | LEDC PWM on GPIO22, 12-bit, 20–100 % in the setup menu, stored in NVS |
 | Serial screenshot | ✅ Working | Press `S` in a serial terminal: one frame is rendered into a PSRAM sprite and streamed out as a BMP |
-| Idle power management | ⚠️ Partial | 2 min → dim to 25 %, 3 min → 8 fps, 10 min → backlight off. **No light sleep** (the CPU stays awake) |
+| Idle power management | ⚠️ Partial | 2 min → dim to 25 %, 3 min → 8 fps, 10 min → backlight off — **suspended entirely while a USB-C cable is attached** (charger status line on IO expander P6, or the pack not being drained; holds with a full pack or with no pack fitted at all). **No light sleep** (the CPU stays awake) |
 | Timezone handling | ⚠️ Fixed offset | A UTC offset from a picker grid; **no DST rules** |
 | Chinese / non-ASCII SSIDs | ⚠️ Known | Rendered as `□` boxes — the GLCD font and the on-screen keyboard are ASCII-only |
 | Audio visualiser (ES8388) | ❌ Not in this build | Exists in the StickS3 / Cardputer builds this was ported from, not ported to the Tab5 |
@@ -74,6 +74,7 @@ The full investigation is in [docs/PORTING-NOTES.md](docs/PORTING-NOTES.md). If 
 | Motion | BMI270 6-axis IMU (unused by this build) |
 | RTC | RX8130CE + backup capacitor |
 | Power monitor | INA226 |
+| Charging | Enabled at boot by `initCharging()` — IO expander #2 P7 `CHG_EN` high, QC on. M5Unified's own bring-up leaves it off, so without that call a plugged cable only feeds the system and the pack never charges |
 | Battery | NP-F550 pack (~6 h at 50 % brightness per M5Stack) |
 | USB | USB-C (OTG) + USB-A host |
 
@@ -124,8 +125,9 @@ There are no buttons on this build — the two touch zones are the whole UI.
 | Setup → **WiFi Settings** | Re-run the provisioning wizard without rebooting |
 | Setup → **Character Set** | `<` / `>` picker for the same six sets |
 | Setup → **Brightness** | `−` / `+` in 10 % steps, clamped to 20–100 %, saved to NVS |
-| Setup → **About** | Version, board, quote, repository URL |
+| Setup → **About** | Version, board, quote, repository URL, and which idle rule is active (`Power USB-C …` / `Power battery …`) |
 | Any touch after idling | Restores brightness/fps and clears the idle state |
+| Plugging in USB-C | Suspends the whole idle chain: no dim, no 8 fps, no blanked panel — a full pack, or no pack fitted at all, still counts as a cable |
 
 Serial console: `FPS: <n>` once per second, and `S` triggers a screenshot.
 
@@ -136,15 +138,18 @@ Serial console: `FPS: <n>` once per second, and `S` triggers a screenshot.
 ```
 setup()
  ├─ M5.begin()                     → board auto-detect, 1280×720 DSI panel, rotation 3
+ ├─ initCharging()                 → expander #2 P7 (CHG_EN) high + QC on: the pack actually charges
  ├─ autoConnectAndSync()           → NVS creds → connect → NTP → UTC into RX8130CE
  │   └─ runWifiSetup()             → only if there were no usable credentials
  ├─ rebuildTrailColors()           → 18 pre-computed trail shades (no per-frame math)
  ├─ initRain()                     → per-column depth, speed, trail length, glyphs
+ ├─ initUsbDetect()                → cable detect: charger status line (P6) + INA226 pack current
  └─ initBrightness()               → LEDC PWM on GPIO22, apply the NVS value
 
 loop()  [30 fps, 8 fps when idle]
  ├─ esp_task_wdt_reset()           → 8 s task watchdog, panic enabled
  ├─ idle state machine             → 2 min dim / 3 min 8 fps / 10 min backlight off
+ │   └─ sampleUsbPower()           → cable attached ⇒ every step above is skipped
  ├─ updateClockFromNTP()           → read the RTC every 60 s, apply the NVS UTC offset
  ├─ handleTouch()                  → SET corner or character-set cycle
  ├─ updateRain()                   → advance columns, re-roll glyphs (chance = t²+2)
@@ -166,7 +171,7 @@ Measured on the real board (the firmware prints `FPS:` once per second):
 
 | | |
 |---|---|
-| Rain frame rate | 30 fps cap (enforced), 8 fps when idle for 3 min |
+| Rain frame rate | 30 fps cap (enforced), 8 fps when idle for 3 min (never while USB-C is attached) |
 | Per-frame PSRAM traffic | ≈ 46 KB of CPU write-back (80 columns × up to 18 glyphs × 2 B) + whatever the cleared bands cost |
 | DSI scan-out | 1280×720×2 B @ 60 Hz ≈ 110 MB/s, continuously |
 | Character rendering | Direct DSI writes; `drawChar` is roughly 2–3× the cost of `fillRect` on this panel |

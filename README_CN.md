@@ -36,7 +36,7 @@
 | 开机 NTP 对时 + 硬件 RTC | ✅ 可用 | 开机阻塞对时，UTC 写入 RX8130CE；之后每 60 秒读一次 RTC |
 | 亮度调节 | ✅ 可用 | GPIO22 LEDC PWM（12 位），设置菜单里 20–100%，存 NVS |
 | 串口截图 | ✅ 可用 | 串口里按 `S`：把一帧渲染进 PSRAM 的 sprite，以 BMP 流式发出 |
-| 闲置省电 | ⚠️ 部分 | 2 分钟→降到 25% 亮度，3 分钟→8fps，10 分钟→关背光。**没有 Light Sleep**（CPU 一直在跑） |
+| 闲置省电 | ⚠️ 部分 | 2 分钟→降到 25% 亮度，3 分钟→8fps，10 分钟→关背光；**插着 USB-C 时整条链路停摆**（看充电芯片状态线 P6，或"电包没在被放电"——电包充满、甚至不装电池都同样成立）。**没有 Light Sleep**（CPU 一直在跑） |
 | 时区 | ⚠️ 固定偏移 | 时区网格里选的是 UTC 偏移量，**不含夏令时规则** |
 | 中文/非 ASCII SSID | ⚠️ 已知 | 显示成 `□` 方框——GLCD 字体和屏幕键盘都只支持 ASCII |
 | 音频频谱（ES8388） | ❌ 本版本没有 | 移植来源的 StickS3 / Cardputer 版本有，Tab5 版没做 |
@@ -72,6 +72,7 @@ ESP32-P4 没有专用显存：MIPI-DSI 控制器直接从 PSRAM 里 DMA 读帧�
 | 运动 | BMI270 六轴（本版本未使用） |
 | RTC | RX8130CE + 备份超级电容 |
 | 电源监测 | INA226 |
+| 充电 | 开机由 `initCharging()` 打开——IO 扩展器 #2 的 P7 `CHG_EN` 拉高、快充使能。M5Unified 自己的初始化不开它，少了这一步插着线只供整机、电包并不充电 |
 | 电池 | NP-F550（M5Stack 标称 50% 亮度约 6 小时） |
 | USB | USB-C（OTG）+ USB-A Host |
 
@@ -122,8 +123,9 @@ Windows / Linux 的路径差异，以及我们踩过的每一个坑，都写在 
 | 设置 → **WiFi Settings** | 不重启，直接重跑配网向导 |
 | 设置 → **Character Set** | `<` / `>` 选同那六种字符集 |
 | 设置 → **Brightness** | `−` / `+`，10% 一档，限幅 20–100%，存 NVS |
-| 设置 → **About** | 版本、板子、台词、仓库地址 |
+| 设置 → **About** | 版本、板子、台词、仓库地址，以及当前省电规则（`Power USB-C …` / `Power battery …`） |
 | 闲置后任意触摸 | 恢复亮度/帧率，退出省电状态 |
+| 插上 USB-C | 整条闲置省电链路停摆：不调暗、不降到 8fps、不关背光——电包充满、甚至不装电池，一样算"插着线" |
 
 串口：每秒打印一次 `FPS: <n>`；按 `S` 触发截图。
 
@@ -134,15 +136,18 @@ Windows / Linux 的路径差异，以及我们踩过的每一个坑，都写在 
 ```
 setup()
  ├─ M5.begin()                     → 自动识别板卡、1280×720 DSI、rotation 3
+ ├─ initCharging()                 → 扩展器 #2 的 P7(CHG_EN) 拉高 + 快充使能：电包才真的充电
  ├─ autoConnectAndSync()           → NVS 凭据 → 连接 → NTP → UTC 写入 RX8130CE
  │   └─ runWifiSetup()             → 只有在没有可用凭据时才走
  ├─ rebuildTrailColors()           → 预计算 18 档拖尾颜色（每帧不做数学）
  ├─ initRain()                     → 每列纵深、速度、拖尾长度、字符
+ ├─ initUsbDetect()                → 插线判定：充电状态线（P6）+ INA226 入包电流
  └─ initBrightness()               → GPIO22 LEDC PWM，应用 NVS 里的亮度
 
 loop()  [30fps；闲置 8fps]
  ├─ esp_task_wdt_reset()           → 8 秒任务看门狗，开 panic
  ├─ 闲置状态机                     → 2 分钟调暗 / 3 分钟 8fps / 10 分钟关背光
+ │   └─ sampleUsbPower()           → 插着线 ⇒ 上面每一档都跳过
  ├─ updateClockFromNTP()           → 每 60 秒读 RTC，叠加 NVS 里的时区偏移
  ├─ handleTouch()                  → SET 角 或 换字符集
  ├─ updateRain()                   → 推进各列，随机换字（概率 = t²+2）
@@ -164,7 +169,7 @@ loop()  [30fps；闲置 8fps]
 
 | | |
 |---|---|
-| 雨的帧率 | 上限 30fps（强制），闲置 3 分钟后 8fps |
+| 雨的帧率 | 上限 30fps（强制），闲置 3 分钟后 8fps（插着 USB-C 时不降频） |
 | 每帧 PSRAM 流量 | 约 46KB 的 CPU 回写（80 列 × 最多 18 字符 × 2 字节）+ 清扫带的开销 |
 | DSI 扫屏 | 1280×720×2 字节 @ 60Hz ≈ 110 MB/s，持续不断 |
 | 字符绘制 | 直接写 DSI；在这块面板上 `drawChar` 大约是 `fillRect` 的 2–3 倍开销 |

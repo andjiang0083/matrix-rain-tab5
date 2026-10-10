@@ -407,6 +407,146 @@ static int g_normalBright = 100;
 static bool g_backlightOff = false;
 static void onActivity();
 
+// ── USB-C attached → the power save stays off ──
+// The requirement is "a cable is in", not "the pack is charging": Tab5 runs on
+// USB-C alone, with no NP-F550 fitted at all. Measured on hardware, a cable on
+// a *full* pack reads CHG_STAT low and −1 mA at 8.342 V — the charger is
+// feeding the load while the pack sits idle — so neither of the two signals
+// this board offers is "5 V is present":
+//   · P6 of the second IO expander (PI4IOE @0x44, IN_STA 0x0F bit 6 — the BSP's
+//     `bsp_usb_c_detect()` reads exactly this bit and M5's demo drives its
+//     "USB-C connected" icon from it, but M5Unified's Tab5 note and the ESPHome
+//     board file both call it what it is, CHG_STAT / "charging status"). The
+//     IP2326's BAT_STAT is low in trickle and high in constant current: a
+//     charging state. It also dies with no pack fitted.
+//   · The INA226 pack current, which costs one read on a chip M5Unified already
+//     configures. Its sign is the real discriminator, but not the way
+//     "charging" suggests: what matters is whether the pack is being *drained*.
+//     Cable + full pack ⇒ ≈0 mA (charger feeds the load) — mains. Cable + empty
+//     pack ⇒ charge current — mains. No pack + cable ⇒ no current path ⇒ ≈0 mA
+//     — mains. Battery alone ⇒ the whole system load flows out of the pack:
+//     clearly negative — battery, and the only case where the idle chain should
+//     run. So "attached" = the pin says charging, or the pack is not draining.
+// All three sources leave P6 unpulled — M5Unified's expander init enables a
+// pull only on P3, while the BSP asks for a pull-down — and a floating input
+// must never read as "cable in", so the pull-down is set here before the bit is
+// trusted.
+// Sampled at 2 Hz, not per frame: two I2C reads every 500 ms on the bus the
+// touch controller already shares, against a display path that owns the PSRAM.
+static constexpr uint8_t PI4IO_REG_IN_STA = 0x0F;
+static bool g_usbPower = false;   // debounced: USB-C attached
+static bool g_usbRaw   = false;   // raw sample being counted
+static int  g_usbAgree = 0;       // consecutive samples agreeing with g_usbRaw
+static bool g_usbPin   = false;   // last raw pin level (for the log)
+static int32_t g_usbMa = 0;       // last pack current, + = into the pack
+
+// Returns false when the expander did not answer (hold the last state, never
+// flap on an I2C hiccup).
+static bool readUsbDetect(bool& attached) {
+  uint8_t in = 0;
+  if (!M5.getIOExpander(USB_DET_EXPANDER).readRegister(PI4IO_REG_IN_STA, &in, 1)) return false;
+  g_usbPin = (in & (1 << USB_DET_PIN)) != 0;
+  g_usbMa  = M5.Power.getBatteryCurrent();
+  // + mA = into the pack (M5Unified inverts the Tab5 shunt to match that
+  // convention). "Attached" is the pin saying charging, or the pack not being
+  // drained — the sign is checked in the direction that survives a full pack
+  // and an absent one.
+  attached = g_usbPin || (g_usbMa > -USB_DET_DISCHARGE_MA);
+  return true;
+}
+
+static void sampleUsbPower(uint32_t now) {
+  static uint32_t lastPoll = 0;
+  if (now - lastPoll < (uint32_t)USB_DET_POLL_MS) return;
+  lastPoll = now;
+
+  bool attached;
+  if (!readUsbDetect(attached)) return;
+  if (attached != g_usbRaw) { g_usbRaw = attached; g_usbAgree = 1; return; }
+  if (g_usbAgree < USB_DET_SAMPLES) g_usbAgree++;
+  if (g_usbAgree >= USB_DET_SAMPLES && g_usbPower != g_usbRaw) {
+    g_usbPower = g_usbRaw;
+    // One line per transition, not a log loop (CONTRIBUTING §2). Both raw
+    // signals ride along so the criterion can be re-derived from a field log:
+    // the pin says charging-or-not, the current says draining-or-not, and the
+    // pair together is what "a cable is in" means on this board.
+    Serial.printf("[POWER] USB-C %s (pin=%d, %d mA) — idle power save %s\n",
+                  g_usbPower ? "attached" : "removed", (int)g_usbPin, (int)g_usbMa,
+                  g_usbPower ? "suspended" : "armed");
+  }
+}
+
+// Called once from setup(), after M5.begin() has brought the expanders up.
+static void initUsbDetect() {
+  auto& ioe = M5.getIOExpander(USB_DET_EXPANDER);
+  bool pulled = ioe.setDirection(USB_DET_PIN, false)
+             && ioe.setPullMode(USB_DET_PIN, m5::IOExpander_Base::pull_down)
+             && ioe.setHighImpedance(USB_DET_PIN, false);
+
+  bool attached = false;
+  bool readOk = readUsbDetect(attached);
+  if (readOk) { g_usbRaw = attached; g_usbPower = attached; g_usbAgree = USB_DET_SAMPLES; }
+
+  // Boot banner line, the one place this is allowed to talk: with no VBUS-
+  // presence input on this board, a field report of these three numbers is the
+  // only way to tell a cable from a battery without a serial debug loop.
+  // Current is + = into the pack (M5Unified inverts the Tab5 shunt for that
+  // convention) and is what decides it; voltage is the 2S pack bus, ~7.6–8.4 V;
+  // -1 mA / 8342 mV with a cable in is the full-pack case that made the pin
+  // useless on its own.
+  Serial.printf("[POWER] USB-C det: pin=%d attached=%d pulled=%d | INA226 %d mA / %d mV\n",
+                (int)g_usbPin, (int)attached, (int)pulled,
+                (int)g_usbMa, (int)M5.Power.getBatteryVoltage());
+}
+
+// ── Charging has to be switched on explicitly ──
+// M5Unified's expander bring-up only reads the chip ID
+// (PI4IOE5V6408_Class::begin()); it never writes a direction or an output
+// register, so nothing on this board ever drove CHG_EN. The IP2326 stayed
+// disabled and a plug only fed the system — the pack never charged. The vendor
+// demo patches exactly this right after its own expander init
+// (M5Tab5-UserDemo/platforms/tab5/main/hal/hal_esp32.cpp: setChargeQcEnable(true)
+// → delay(50) → setChargeEnable(true)), and retro-go's tab5_power.h records the
+// same hole from the other side (its BSP leaves P7 low, so "plugging in USB-C
+// did not charge"). Same order here.
+// digitalWrite() only touches OUT_SET (0x05) — the direction must be set first,
+// or the pin is still an input and the write does nothing at all. That is why a
+// "set the output bit" fix alone would look correct and change nothing.
+static constexpr uint8_t PI4IO_REG_OUT_SET = 0x05;
+
+static void initCharging() {
+  auto& ioe = M5.getIOExpander(CHG_IOEXPANDER);
+  ioe.setDirection(CHG_EN_PIN, true);
+  ioe.setHighImpedance(CHG_EN_PIN, false);
+  ioe.setDirection(CHG_QC_PIN, true);
+  ioe.setHighImpedance(CHG_QC_PIN, false);
+
+  ioe.digitalWrite(CHG_QC_PIN, false);  // QC_EN is active low; the vendor settles it first
+  delay(50);
+  ioe.digitalWrite(CHG_EN_PIN, true);   // CHG_EN high = IP2326 enabled
+
+  // Read the register back: one boot line of evidence that the write landed,
+  // and that P7 is actually driven (0x05 bit 7) rather than silently ignored.
+  uint8_t out = 0;
+  bool readOk = ioe.readRegister(PI4IO_REG_OUT_SET, &out, 1);
+  Serial.printf("[POWER] charging: P7(CHG_EN)=%d P5(QC_EN)=%d out=0x%02X readOk=%d\n",
+                (int)((out >> CHG_EN_PIN) & 1), (int)((out >> CHG_QC_PIN) & 1),
+                (int)out, (int)readOk);
+}
+
+// Undo every power-save step. Called by touch and, while a cable is attached,
+// by the loop — a blanked panel on mains power was the reported bug.
+static void setBrightness(int v);   // defined with the LEDC helpers below
+static void restoreFromIdle() {
+  if (g_backlightOff) {
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, g_normalBright * 4095 / 100);
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
+    g_backlightOff = false;
+  }
+  g_idleLevel = 0;
+  setBrightness(g_normalBright);
+}
+
 static void handleTouch() {
   if (millis() - g_touchDebounce < 350) return;
   auto cnt = M5.Touch.getCount();
@@ -557,16 +697,7 @@ static void setBrightness(int v) {
 // Levels: 0=normal, 1=dim(2min), 2=lowfps(3min), 3=backlight-off(10min)
 static void onActivity() {
   g_lastActivity = millis();
-  if (g_idleLevel > 0 || g_backlightOff) {
-    // Restore from idle
-    if (g_backlightOff) {
-      ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, g_normalBright * 4095 / 100);
-      ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
-      g_backlightOff = false;
-    }
-    g_idleLevel = 0;
-    setBrightness(g_normalBright);
-  }
+  if (g_idleLevel > 0 || g_backlightOff) restoreFromIdle();
 }
 
 static int getIdleFps() {
@@ -620,6 +751,11 @@ static void drawSetupMenu(int subState, int curItem, int brightPct) {
     UI::left(d, UI::T_BIG,   "Matrix Rain Clock",  80, 150, MG::TITLE);
     UI::left(d, UI::T_BODY,  APP_VERSION,          80, 200, MG::DIM);
     UI::left(d, UI::T_BODY,  "M5Stack Tab5  |  ESP32-P4", 80, 246, MG::BODY);
+    // The USB-C line is the user-readable half of the idle override: it says
+    // which of the two rules the idle state machine is running right now.
+    UI::left(d, UI::T_SMALL, g_usbPower ? "Power   USB-C (idle dimming off)"
+                                        : "Power   battery (idle dimming on)",
+             80, 284, g_usbPower ? MG::BODY : MG::DIM);
     UI::left(d, UI::T_SMALL, "\"There is no spoon.\"",    80, 316, MG::DIM);
     UI::left(d, UI::T_SMALL, "github.com/andjiang0083/matrix-rain-tab5", 80, 348, MG::DIM);
   }
@@ -648,18 +784,21 @@ void runSetupMenu() {
   int brightPct = getBrightness();
   bool exitMenu = false;
   int lastSub = -1, lastCur = -1, lastBright = -1, lastCS = -1;
+  bool lastUsb = g_usbPower;
   bool dirty = true;
 
   while (!exitMenu) {
     M5.update(); esp_task_wdt_reset();
+    sampleUsbPower(millis());   // loop() is not running: the About line reads this
 
     // Redraw only if state changed (no flicker)
     if (dirty || subState != lastSub || curItem != lastCur
         || brightPct != lastBright
-        || (subState == 1 && g_curSet != lastCS)) {
+        || (subState == 1 && g_curSet != lastCS)
+        || (subState == 3 && g_usbPower != lastUsb)) {
       drawSetupMenu(subState, curItem, brightPct);
       lastSub = subState; lastCur = curItem;
-      lastBright = brightPct; lastCS = g_curSet;
+      lastBright = brightPct; lastCS = g_curSet; lastUsb = g_usbPower;
       dirty = false;
     }
 
@@ -733,6 +872,7 @@ void setup() {
 
   auto cfg = M5.config();
   M5.begin(cfg);
+  initCharging();   // right after the expanders are up: a low pack should charge, not wait for WiFi
   M5.Display.setRotation(SCREEN_ROTATION);
   M5.Display.setTextWrap(false);
   M5.Display.setTextSize(2);
@@ -769,6 +909,7 @@ void setup() {
   initBrightness();
   g_normalBright = getBrightness();
   setBrightness(g_normalBright);
+  initUsbDetect();          // after M5.begin(): the expanders must be up first
   g_lastActivity = millis();
 
   // Disconnect WiFi after initial NTP sync, keep hosted stack alive
@@ -795,8 +936,15 @@ void loop() {
   }
 
   // ── Idle state machine ──
+  // A cable is power, so power save is pointless while one is attached: no dim,
+  // no 8 fps, no blanked panel (that blank on mains was the reported bug).
+  // Unplugging starts a fresh idle window instead of continuing the old count.
+  sampleUsbPower(now);
   uint32_t idleMs = now - g_lastActivity;
-  if (!g_backlightOff) {
+  if (g_usbPower) {
+    if (g_idleLevel > 0 || g_backlightOff) restoreFromIdle();
+    g_lastActivity = now;
+  } else if (!g_backlightOff) {
     if (idleMs > 600000 && g_idleLevel < 3) {
       // Level 3: backlight off (10 min)
       g_idleLevel = 3;
