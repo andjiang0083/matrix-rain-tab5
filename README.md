@@ -38,7 +38,7 @@ Honest state, measured on real hardware (not aspirational):
 | NTP boot sync + hardware RTC | ✅ Working | Blocking sync at boot, UTC written to the RX8130CE; RTC re-read every 60 s |
 | Brightness | ✅ Working | LEDC PWM on GPIO22, 12-bit, 20–100 % in the setup menu, stored in NVS |
 | Serial screenshot | ✅ Working | Press `S` in a serial terminal: one frame is rendered into a PSRAM sprite and streamed out as a BMP |
-| Idle power management | ⚠️ Partial | 2 min → dim to 25 %, 3 min → 8 fps, 10 min → backlight off — **suspended entirely while a USB-C cable is attached** (charger status line on IO expander P6, or the pack not being drained; holds with a full pack or with no pack fitted at all). **No light sleep** (the CPU stays awake) |
+| Idle power management | ⚠️ Partial | 2 min → dim to 25 %, 3 min → 8 fps, 10 min → backlight off — **suspended entirely while a USB-C cable is attached**, decided by the INA226 pack current: on mains the pack is either idle (≈0 mA) or charging (positive) — also true with a full pack, or with no pack fitted at all — while a clock running off its pack is draining it and reads a clear discharge. The charger's status pin rides along in the log but is deliberately out of the verdict (with no charger attached it can sit high). **No light sleep** (the CPU stays awake) |
 | Timezone handling | ⚠️ Fixed offset | A UTC offset from a picker grid; **no DST rules** |
 | Chinese / non-ASCII SSIDs | ⚠️ Known | Rendered as `□` boxes — the GLCD font and the on-screen keyboard are ASCII-only |
 | Audio visualiser (ES8388) | ❌ Not in this build | Exists in the StickS3 / Cardputer builds this was ported from, not ported to the Tab5 |
@@ -143,7 +143,7 @@ setup()
  │   └─ runWifiSetup()             → only if there were no usable credentials
  ├─ rebuildTrailColors()           → 18 pre-computed trail shades (no per-frame math)
  ├─ initRain()                     → per-column depth, speed, trail length, glyphs
- ├─ initUsbDetect()                → cable detect: charger status line (P6) + INA226 pack current
+ ├─ initUsbDetect()                → cable detect: INA226 pack current (the status pin is logged, not trusted)
  └─ initBrightness()               → LEDC PWM on GPIO22, apply the NVS value
 
 loop()  [30 fps, 8 fps when idle]

@@ -28,7 +28,8 @@ static const int USB_DET_EXPANDER = 1;      // PI4IOE @0x44 (M5Unified 的索引
 static const int USB_DET_PIN      = 6;      // IN_STA(0x0F) bit 6
 static const int USB_DET_POLL_MS  = 500;    // 采样周期（不是每帧）
 static const int USB_DET_SAMPLES  = 2;      // 连续 N 次同值才改状态（滤波）
-static const int USB_DET_DISCHARGE_MA = 40; // 电包放电超过这个值(mA)才认为"没市电"
+static const int USB_DET_IDLE_MA   = 40;    // 电包电流高于 -40mA 即"没在被抽"→市电（充电为＋）
+static const int USB_DET_LATCH_MS  = 60000; // 证据消失后的宽限期(ms)，跨过瞬间掉到放电的抖动
 
 // ── 充电使能 (扩展器 #2 @0x44) ──
 // 厂商 BSP/demo 的口径：P7=CHG_EN(高=使能充电)、P5=QC_EN(低=使能快充)

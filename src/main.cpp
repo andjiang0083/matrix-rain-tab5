@@ -419,14 +419,19 @@ static void onActivity();
 //     board file both call it what it is, CHG_STAT / "charging status"). The
 //     IP2326's BAT_STAT is low in trickle and high in constant current: a
 //     charging state. It also dies with no pack fitted.
-//   · The INA226 pack current, which costs one read on a chip M5Unified already
-//     configures. Its sign is the real discriminator, but not the way
-//     "charging" suggests: what matters is whether the pack is being *drained*.
-//     Cable + full pack ⇒ ≈0 mA (charger feeds the load) — mains. Cable + empty
-//     pack ⇒ charge current — mains. No pack + cable ⇒ no current path ⇒ ≈0 mA
-//     — mains. Battery alone ⇒ the whole system load flows out of the pack:
-//     clearly negative — battery, and the only case where the idle chain should
-//     run. So "attached" = the pin says charging, or the pack is not draining.
+//   · The INA226 pack current — one more read on a chip M5Unified already
+//     configures. Its *sign* is deliberately not trusted here: in the field the
+//     clock neither dimmed on battery nor showed a clean charge current on a
+//     cable, and whether M5Unified's "+ = into the pack" inversion matches this
+//     board is unverified. It does not need to be verified, because only the
+//     magnitude carries the answer. The pack current is ≈0 when the pack is
+//     doing nothing, which is exactly what a cable looks like: it feeds the load
+//     and leaves the pack idle, full or absent. A pack that is actually running
+//     the clock carries the whole system load — hundreds of mA, whichever way
+//     round the shunt is wired. Hence "attached" = the status pin says charging,
+//     or |pack current| is small. (v1.3.5 first shipped the sign-dependent form
+//     of this test; it left the clock wide awake on battery, which is how the
+//     sign convention got caught.)
 // All three sources leave P6 unpulled — M5Unified's expander init enables a
 // pull only on P3, while the BSP asks for a pull-down — and a floating input
 // must never read as "cable in", so the pull-down is set here before the bit is
@@ -438,20 +443,37 @@ static bool g_usbPower = false;   // debounced: USB-C attached
 static bool g_usbRaw   = false;   // raw sample being counted
 static int  g_usbAgree = 0;       // consecutive samples agreeing with g_usbRaw
 static bool g_usbPin   = false;   // last raw pin level (for the log)
-static int32_t g_usbMa = 0;       // last pack current, + = into the pack
+static int32_t g_usbMa = 0;       // last pack current, sign per M5Unified
+
+// Time of the last instant anything said "something outside is feeding us".
+static uint32_t g_lastMainsMs = 0;
 
 // Returns false when the expander did not answer (hold the last state, never
-// flap on an I2C hiccup).
-static bool readUsbDetect(bool& attached) {
+// flap on an I2C hiccup). `mains` is the instantaneous *evidence*, not the
+// verdict — the verdict needs the latch in sampleUsbPower().
+//
+// Evidence = the pack is not being drained. That is the one signal this board
+// offers that survives every way the clock is actually used:
+//   · charging             +513 mA measured with the charger on — the sign is
+//                          verified on hardware, and M5Unified's "+ = into the
+//                          pack" holds for this board
+//   · full pack on a plug  ≈0 mA: the charger feeds the load, the pack idles
+//   · no pack fitted       ≈0 mA: nothing to drain
+//   · battery alone        the whole system load comes out of the pack — hundreds
+//                          of mA — so the pack is being drained and nothing else
+//                          is feeding us.
+// The status pin is logged but deliberately *not* part of the verdict. With the
+// charger unpowered it can sit high (it has no pull of its own — see below), and
+// a pin that says "charging" on battery is exactly how the first two attempts at
+// this failed: the clock stayed awake for as long as the pack lasted. The pack
+// current cannot make that mistake, because a clock running off its pack has to
+// be draining it.
+static bool readUsbDetect(bool& mains) {
   uint8_t in = 0;
   if (!M5.getIOExpander(USB_DET_EXPANDER).readRegister(PI4IO_REG_IN_STA, &in, 1)) return false;
   g_usbPin = (in & (1 << USB_DET_PIN)) != 0;
   g_usbMa  = M5.Power.getBatteryCurrent();
-  // + mA = into the pack (M5Unified inverts the Tab5 shunt to match that
-  // convention). "Attached" is the pin saying charging, or the pack not being
-  // drained — the sign is checked in the direction that survives a full pack
-  // and an absent one.
-  attached = g_usbPin || (g_usbMa > -USB_DET_DISCHARGE_MA);
+  mains = g_usbMa > -USB_DET_IDLE_MA;
   return true;
 }
 
@@ -460,16 +482,21 @@ static void sampleUsbPower(uint32_t now) {
   if (now - lastPoll < (uint32_t)USB_DET_POLL_MS) return;
   lastPoll = now;
 
-  bool attached;
-  if (!readUsbDetect(attached)) return;
+  bool mains;
+  if (!readUsbDetect(mains)) return;
+  if (mains) g_lastMainsMs = now;
+  // Why a latch: the charger on this board stops and restarts on its own once
+  // the pack is full, so the evidence for "a cable is in" is intermittent even
+  // while the cable is in. One minute of grace bridges those gaps without
+  // reintroducing the flicker the old, per-sample test would have. On battery
+  // no evidence ever appears, so the latch expires and the idle chain runs.
+  bool attached = mains || (now - g_lastMainsMs) < (uint32_t)USB_DET_LATCH_MS;
   if (attached != g_usbRaw) { g_usbRaw = attached; g_usbAgree = 1; return; }
   if (g_usbAgree < USB_DET_SAMPLES) g_usbAgree++;
   if (g_usbAgree >= USB_DET_SAMPLES && g_usbPower != g_usbRaw) {
     g_usbPower = g_usbRaw;
     // One line per transition, not a log loop (CONTRIBUTING §2). Both raw
-    // signals ride along so the criterion can be re-derived from a field log:
-    // the pin says charging-or-not, the current says draining-or-not, and the
-    // pair together is what "a cable is in" means on this board.
+    // signals ride along so the criterion can be re-derived from a field log.
     Serial.printf("[POWER] USB-C %s (pin=%d, %d mA) — idle power save %s\n",
                   g_usbPower ? "attached" : "removed", (int)g_usbPin, (int)g_usbMa,
                   g_usbPower ? "suspended" : "armed");
@@ -483,9 +510,15 @@ static void initUsbDetect() {
              && ioe.setPullMode(USB_DET_PIN, m5::IOExpander_Base::pull_down)
              && ioe.setHighImpedance(USB_DET_PIN, false);
 
-  bool attached = false;
-  bool readOk = readUsbDetect(attached);
-  if (readOk) { g_usbRaw = attached; g_usbPower = attached; g_usbAgree = USB_DET_SAMPLES; }
+  bool mains = false;
+  bool readOk = readUsbDetect(mains);
+  if (readOk) {
+    // At boot the verdict is the bare evidence — no latch to inherit, but the
+    // anchor still has to be seeded, or millis() being under the latch window
+    // would make a battery boot look plugged in for its first minute.
+    g_lastMainsMs = mains ? millis() : (uint32_t)(0 - USB_DET_LATCH_MS);
+    g_usbRaw = mains; g_usbPower = mains; g_usbAgree = USB_DET_SAMPLES;
+  }
 
   // Boot banner line, the one place this is allowed to talk: with no VBUS-
   // presence input on this board, a field report of these three numbers is the
@@ -495,7 +528,7 @@ static void initUsbDetect() {
   // -1 mA / 8342 mV with a cable in is the full-pack case that made the pin
   // useless on its own.
   Serial.printf("[POWER] USB-C det: pin=%d attached=%d pulled=%d | INA226 %d mA / %d mV\n",
-                (int)g_usbPin, (int)attached, (int)pulled,
+                (int)g_usbPin, (int)mains, (int)pulled,
                 (int)g_usbMa, (int)M5.Power.getBatteryVoltage());
 }
 
