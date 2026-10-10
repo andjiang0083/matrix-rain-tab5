@@ -10,6 +10,6 @@ platform_entries:
     cover: releases/cover-1280x720-matrix-rain-clock-m5stack-tab5-tab5.png
     project_link: "https://github.com/andjiang0083/matrix-rain-tab5"
     m5burner_firmware_id: "1897200000000000841"
-    m5burner_version_id: "2106681088593502209"   # ← v1.3.4（已 PUBLISHED）；v1.3.5 的 vid 提交后回填
+    m5burner_version_id: "2108963785159241729"   # v1.3.5（PENDING 审核中）；上一版 2106681088593502209 = v1.3.4（PUBLISHED）
     github_release: "https://github.com/andjiang0083/matrix-rain-tab5/releases/tag/v1.3.5"
-    readback: 2026-10-11 PENDING — v1.3.5 产物已出（DIO / bootloader 区段与 v1.3.4 逐字节一致），M5Burner 提交后回填 vid
+    readback: 2026-10-11 PENDING vid=2108963785159241729（1.3.5 / PUBLIC / bin=matrix-rain-tab5-v1.3.5.bin / 双语说明已落 / 封面 1280×720）；v1.3.4 仍 PUBLISHED，审核放行后再回读
