@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 andjiang0083
+ */
 // ────────────────────────────────────────────────────────────
 // MATRIX GUI — Unified color palette & helpers for Cyber Clock
 // All screens share this palette: green-on-black, no red/blue.

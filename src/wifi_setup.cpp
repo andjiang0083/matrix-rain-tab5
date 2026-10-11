@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 andjiang0083
+ */
 // ────────────────────────────────────────────────────────────
 // CYBER CLOCK — WiFi Setup UI (ESP32-Hosted SDIO + IDF API)
 // ────────────────────────────────────────────────────────────

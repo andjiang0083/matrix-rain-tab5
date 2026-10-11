@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 andjiang0083
 # ---------------------------------------------------------------------------
 # make_release.sh — one command from a built tree to a publishable image.
 #

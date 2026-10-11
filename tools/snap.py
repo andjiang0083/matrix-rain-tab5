@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 andjiang0083
 """snap.py — capture a screenshot from Matrix Rain Clock over serial.
 
 Firmware side (src/main.cpp, doSerialSnap):

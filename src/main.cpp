@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 andjiang0083
+ */
 // ────────────────────────────────────────────────────────────
 // CYBER CLOCK — M5Stack Tab5 — Matrix Rain v1.3.2
 // 80 cols × 6 char sets, 30fps, NTP time sync, ghost-character glow clock, WiFi setup

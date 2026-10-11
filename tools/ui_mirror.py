@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 andjiang0083
 # ────────────────────────────────────────────────────────────
 # ui_mirror.py — render the SHIPPED settings screens by parsing the firmware.
 #

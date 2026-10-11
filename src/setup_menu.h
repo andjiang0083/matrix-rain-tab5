@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 andjiang0083
+ */
 // ────────────────────────────────────────────────────────────
 // SETUP MENU — entry point from clock's SET button
 // ────────────────────────────────────────────────────────────

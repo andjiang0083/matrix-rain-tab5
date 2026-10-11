@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 andjiang0083
 # ────────────────────────────────────────────────────────────
 # ui_proposal.py — design preview for the SETTINGS-UI unification pass.
 # NOT a firmware mirror: it renders the *proposed* spec so the look can be

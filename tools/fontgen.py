@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 andjiang0083
 """Generate 16×16 1bpp katakana bitmap font header for ESP32 firmware."""
 
 from PIL import Image, ImageDraw, ImageFont
